@@ -1,3 +1,5 @@
+
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <!doctype html>
 <html lang="en">
 <head>
@@ -11,8 +13,8 @@
 <style id="pageStyle"></style>
 <style>
 :root{
-  --bg:#E8EFEB; --surface:#FFFFFF; --ink:#1F2528; --muted:#5D6964; --line:#CFDAD4;
-  --jade:#2A7A64; --on-jade:#FFFFFF; --mango:#F2B22E; --on-mango:#1F2528; --danger:#B3261E;
+  --bg:#F7EEE0; --surface:#FFFFFF; --ink:#2A1C14; --muted:#7D6A58; --line:#E6D7BE;
+  --jade:#8E2430; --on-jade:#FFFFFF; --mango:#D4A017; --on-mango:#2A1C14; --danger:#C0392B;
   --serif:"Noto Serif SC","Songti SC","STSong","SimSun",serif;
   --sans:"Figtree",system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
   box-sizing:border-box;
@@ -21,13 +23,13 @@
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#131917; --surface:#1D2521; --ink:#E9F0EC; --muted:#98A5A0; --line:#2E3A35;
-    --jade:#4DAF8E; --on-jade:#0D1813; --mango:#F2B22E; --on-mango:#1F2528; --danger:#F2867E;
+    --bg:#1C1310; --surface:#2A1F19; --ink:#F5E8DA; --muted:#BBA68F; --line:#3E2E22;
+    --jade:#D1564C; --on-jade:#1C1310; --mango:#E3B43C; --on-mango:#1C1310; --danger:#E4766A;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#131917; --surface:#1D2521; --ink:#E9F0EC; --muted:#98A5A0; --line:#2E3A35;
-  --jade:#4DAF8E; --on-jade:#0D1813; --mango:#F2B22E; --on-mango:#1F2528; --danger:#F2867E;
+  --bg:#1C1310; --surface:#2A1F19; --ink:#F5E8DA; --muted:#BBA68F; --line:#3E2E22;
+  --jade:#D1564C; --on-jade:#1C1310; --mango:#E3B43C; --on-mango:#1C1310; --danger:#E4766A;
 }
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:border-box}
@@ -173,6 +175,7 @@ main{flex:1;min-height:0;position:relative}
 .seg button.on{background:var(--jade);border-color:var(--jade);color:var(--on-jade)}
 .quick{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .quick button{height:42px;padding:0 14px;border-radius:10px;background:var(--bg);border:1px solid var(--line);font-weight:600}
+.quick button.on{background:var(--jade);border-color:var(--jade);color:var(--on-jade)}
 .chg{display:flex;justify-content:space-between;align-items:baseline;padding:10px 0;font-variant-numeric:tabular-nums}
 .chg strong{font-size:26px}
 .paper{background:var(--bg);padding:12px;border-radius:12px;overflow:auto;margin-bottom:14px}
@@ -435,12 +438,19 @@ function totals(){
 }
 const normPhone=p=>String(p||'').replace(/[^0-9]/g,'');
 const findMember=p=>S.members[normPhone(p)]||null;
-function awardPoints(phone,total){
+function settleMember(phone,total,redeem){
   const p=normPhone(phone);if(!p)return;
-  const pts=Math.floor(total*(S.cfg.ptsPerRM||0));
+  const earn=Math.floor(total*(S.cfg.ptsPerRM||0));
   const m=S.members[p]||{phone:p,name:'',points:0,visits:0,spent:0,since:dayKey()};
-  S.members[p]={phone:p,name:m.name,points:(m.points||0)+pts,visits:(m.visits||0)+1,spent:r2((m.spent||0)+total),since:m.since};
+  let pts=(m.points||0)+earn;
+  if(redeem)pts-=redeem.pts;
+  if(pts<0)pts=0;
+  S.members[p]={phone:p,name:m.name,points:pts,visits:(m.visits||0)+1,spent:r2((m.spent||0)+total),since:m.since};
   saveMember(p);
+}
+function payTotal(){
+  const t=totals(),val=(S.pay&&S.pay.redeem)?S.pay.redeem.val:0;
+  return {t:t,eff:Math.max(0,r2(t.total-val))};
 }
 function addLine(id,addons,ta){
   const key=addons.map(a=>a.id).sort().join(',')+'|'+ta;
@@ -595,11 +605,38 @@ function receiptHTML(o){
   o.lines.forEach(l=>{h+='<div>'+esc(l.n)+'</div>'+R(l.q+' x '+Number(l.p).toFixed(2),(l.p*l.q).toFixed(2))});
   h+='<hr>'+R('Subtotal',o.sub.toFixed(2));
   if(o.disc>0)h+=R('Discount','-'+o.disc.toFixed(2));
+  if(o.redeem)h+=R('Reward: '+esc(o.redeem.n)+' (-'+o.redeem.pts+'pts)','-'+Number(o.redeem.val).toFixed(2));
   if(o.tax>0)h+=R('Tax '+o.taxPct+'%',o.tax.toFixed(2));
   if(o.rnd)h+=R('Rounding',(o.rnd>0?'+':'')+o.rnd.toFixed(2));
   h+=R('Total (RM)',o.due.toFixed(2),'b')+'<hr>'+R(esc(mLabel(o.method)),o.recv.toFixed(2));
   if(o.method==='cash')h+=R('Change',o.change.toFixed(2));
   return h+'<hr><div class="c">Thank you! 谢谢惠顾</div></div>';
+}
+function qpText(o){
+  let t='<CENTER><BIG>'+S.cfg.shop+'<BR>';
+  t+='<CENTER>'+o.day+' '+timeStr(o.t)+'<BR>';
+  t+='<CENTER>Order #'+o.no+(o.note?' - '+o.note:'')+'<BR>';
+  if(o.void)t+='<CENTER><BOLD>VOID<NORMAL><BR>';
+  t+='<LINE><BR><LEFT>';
+  o.lines.forEach(l=>{t+=l.n+'<BR>'+l.q+' x '+Number(l.p).toFixed(2)+';;'+(l.p*l.q).toFixed(2)+'<BR>'});
+  t+='<LINE><BR>';
+  t+='Subtotal;;'+o.sub.toFixed(2)+'<BR>';
+  if(o.disc>0)t+='Discount;;-'+o.disc.toFixed(2)+'<BR>';
+  if(o.redeem)t+='Reward: '+o.redeem.n+' (-'+o.redeem.pts+'pts);;-'+Number(o.redeem.val).toFixed(2)+'<BR>';
+  if(o.tax>0)t+='Tax '+o.taxPct+'%;;'+o.tax.toFixed(2)+'<BR>';
+  if(o.rnd)t+='Rounding;;'+(o.rnd>0?'+':'')+o.rnd.toFixed(2)+'<BR>';
+  t+='<LINE><BR><BOLD>Total (RM);;'+o.due.toFixed(2)+'<NORMAL><BR><LINE><BR>';
+  t+=mLabel(o.method)+';;'+o.recv.toFixed(2)+'<BR>';
+  if(o.method==='cash')t+='Change;;'+o.change.toFixed(2)+'<BR>';
+  t+='<CENTER>Thank you! 谢谢惠顾<BR>';
+  t+='<DRAWER><CUT>';
+  return t;
+}
+function qpPrint(text){
+  try{
+    const enc=encodeURI(text);
+    location.href='intent://'+enc+'#Intent;scheme=quickprinter;package=pe.diegoveloper.printerserverapp;end;';
+  }catch(e){toast('Could not reach the printer app.')}
 }
 function syncPrint(){
   const M=S.modal;
@@ -610,7 +647,7 @@ function syncPrint(){
 /* ---------- modals ---------- */
 const HINTS={online:'For DuitNow QR, e-wallet, bank transfer, or card. Mark as paid once the payment comes through.',others:'For anything else — vouchers, staff meals, complimentary, etc.'};
 function payModal(){
-  const t=totals(),p=S.pay,d=dueFor(t.total,p.method);
+  const {t,eff}=payTotal(),p=S.pay,d=dueFor(eff,p.method);
   let quick='';
   if(p.method==='cash'){
     const notes=[5,10,20,50,100].filter(n=>n>=d.due).slice(0,3);
@@ -619,12 +656,14 @@ function payModal(){
       '<div class="chg"><span>Change</span><strong id="chg">—</strong></div>';
   }else quick='<p class="hint">'+HINTS[p.method]+'</p>';
   return '<div class="sheet" role="dialog" aria-modal="true" aria-label="Take payment">'+
+    '<div class="due"><span>Amount due</span><strong id="dueAmt">'+rm(d.due)+'</strong>'+
+    '<small id="dueNote">'+(p.redeem?esc(p.redeem.n)+' applied, −'+rm(p.redeem.val)+(d.rnd?' · rounded':''):(d.rnd?'Rounded from '+rm(eff):''))+'</small></div>'+
     '<div class="sheet-head"><h2>Payment</h2><button class="x" data-act="close-modal" aria-label="Close">✕</button></div>'+
-    '<div class="due"><span>Amount due</span><strong>'+rm(d.due)+'</strong>'+(d.rnd?'<small>Rounded from '+rm(t.total)+'</small>':'')+'</div>'+
     '<div class="seg3">'+METHODS.map(m=>'<button class="'+(p.method===m[0]?'on':'')+'" data-act="method" data-v="'+m[0]+'">'+m[1]+'</button>').join('')+'</div>'+
     quick+
     '<label class="fld">Member phone (optional)<input id="mphone" inputmode="numeric" autocomplete="off" value="'+esc(p.phone)+'" placeholder="e.g. 0123456789"></label>'+
     '<div id="mhint">'+memberHint(p.phone)+'</div>'+
+    '<div id="rewardBox">'+rewardPicker()+'</div>'+
     '<label class="fld">Note (optional)<input id="note" maxlength="60" autocomplete="off" value="'+esc(p.note)+'" placeholder="Name or table"></label>'+
     '<button class="charge" id="confirmPay" style="width:100%;margin:6px 0 0" data-act="confirm-pay">Mark as paid</button></div>';
 }
@@ -636,9 +675,18 @@ function memberHint(phone){
   if(normPhone(phone))return '<p class="hint">New member — this order starts them with '+earn+' points.</p>';
   return '<p class="hint">Leave blank for a walk-in with no points.</p>';
 }
+function rewardPicker(){
+  const p=S.pay,m=findMember(p.phone);
+  if(!m)return'';
+  const avail=(S.cfg.rewards||[]).filter(r=>m.points>=r.pts);
+  if(!avail.length)return'';
+  return '<h3>Redeem a reward</h3><div class="quick">'+avail.map(r=>'<button class="'+(p.redeem&&p.redeem.id===r.id?'on':'')+'" data-act="redeem" data-v="'+esc(r.id)+'">'+esc(r.n)+' ('+r.pts+' pts)</button>').join('')+'</div>';
+}
 function updateChange(){
   if(!S.pay)return;
-  const t=totals(),d=dueFor(t.total,S.pay.method);
+  const {eff}=payTotal(),d=dueFor(eff,S.pay.method),p=S.pay;
+  const da=$('#dueAmt');if(da)da.textContent=rm(d.due);
+  const dn=$('#dueNote');if(dn)dn.textContent=p.redeem?(p.redeem.n+' applied, −'+rm(p.redeem.val)+(d.rnd?' · rounded':'')):(d.rnd?'Rounded from '+rm(eff):'');
   let ok=true;
   if(S.pay.method==='cash'){
     const recv=parseFloat(S.pay.recv);
@@ -667,6 +715,7 @@ function rewardModal(){
   return '<div class="sheet" role="dialog" aria-modal="true" aria-label="Reward"><div class="sheet-head"><h2>'+(isNew?'Add reward':'Edit reward')+'</h2><button class="x" data-act="close-modal" aria-label="Close">✕</button></div>'+
     '<label class="fld">What they get<input id="rw-n" value="'+esc(r.n)+'" autocomplete="off" placeholder="Free red bean soup"></label>'+
     '<label class="fld">Points needed<input id="rw-p" inputmode="numeric" value="'+esc(r.pts)+'" autocomplete="off" placeholder="100"></label>'+
+    '<label class="fld">Value off the bill (RM, 0 if it\'s not a discount)<input id="rw-v" inputmode="decimal" value="'+esc(r.val||0)+'" autocomplete="off" placeholder="5.90"></label>'+
     '<div class="btnrow" style="margin-top:12px"><button class="btn primary" data-act="save-reward">Save</button>'+
     (isNew?'':'<button class="btn danger" data-act="del-reward">'+(M.arm?'Tap again to delete':'Delete')+'</button>')+
     '<button class="btn" data-act="close-modal">Cancel</button></div></div>';
@@ -820,6 +869,15 @@ function moveModal(){
     '<label class="fld">Note<input id="mv-n" maxlength="60" autocomplete="off" value="'+esc(M.n)+'" placeholder="For example: bought ice"></label>'+
     '<button class="charge" style="width:100%;margin:6px 0 0" data-act="save-move">Save</button></div>';
 }
+function openDrawer(){
+  try{
+    const bytes=[0x1B,0x70,0x00,0x19,0xFA];
+    let bin='';bytes.forEach(b=>bin+=String.fromCharCode(b));
+    const b64=btoa(bin);
+    const a=document.createElement('a');a.href='rawbt:base64,'+b64;
+    document.body.appendChild(a);a.click();a.remove();
+  }catch(e){}
+}
 function saveMove(){
   const M=S.modal,amt=parseFloat($('#mv-a').value),s=curShift();
   if(!s){toast('Open the till first.');return}
@@ -889,22 +947,23 @@ function shiftDay(n){
   S.viewDay=dayKey(d);render();
 }
 function confirmPay(){
-  const t=totals(),p=S.pay;if(!t.count)return;
+  const {t,eff}=payTotal(),p=S.pay;if(!t.count)return;
   const sh=curShift();
   if(!sh){toast('Open the till first.');return}
-  const d=dueFor(t.total,p.method);
+  const d=dueFor(eff,p.method);
   const recv=p.method==='cash'?(parseFloat(p.recv)||0):d.due;
   if(p.method==='cash'&&recv<d.due)return;
   const day=dayKey();
   const o={id:uid(),day:day,dev:DEV,shift:sh.id,t:new Date().toISOString(),no:ordersOf(day).length+1,
     lines:t.lines.map(l=>({n:l.n,e:l.e,p:l.p,q:l.q})),sub:t.sub,disc:t.disc,tax:t.tax,taxPct:S.cfg.taxPct||0,
-    total:t.total,rnd:d.rnd,due:d.due,method:p.method,recv:r2(recv),change:r2(recv-d.due),note:p.note.trim(),
+    total:t.total,redeem:p.redeem?{n:p.redeem.n,pts:p.redeem.pts,val:p.redeem.val}:null,
+    rnd:d.rnd,due:d.due,method:p.method,recv:r2(recv),change:r2(recv-d.due),note:p.note.trim(),
     phone:normPhone(p.phone),void:false};
   const id=day+'_'+DEV;
   const cur=S.docs[id]||{day:day,dev:DEV,orders:[]};
   S.docs[id]={day:cur.day,dev:DEV,orders:cur.orders.concat([o])};
   saveDoc(id);
-  if(o.phone)awardPoints(o.phone,t.total);
+  if(o.phone)settleMember(o.phone,eff,p.redeem);
   S.cart=[];S.disc={t:'pct',v:0};S.cartOpen=false;S.pay=null;
   openModal({type:'receipt',order:o,list:false});
 }
@@ -946,12 +1005,17 @@ function act(a,b){
     case 'addon-confirm':{const M=S.modal,chosen=Object.values(M.sel).flat().map(findOpt).filter(Boolean);addLine(M.id,chosen,M.ta);closeModal();break}
     case 'clear':S.cart=[];S.disc={t:'pct',v:0};S.cartOpen=false;render();break;
     case 'cart-toggle':S.cartOpen=!S.cartOpen;render();break;
-    case 'charge':if(totals().count){S.pay={method:'cash',recv:'',note:'',phone:''};openModal({type:'pay'})}break;
-    case 'method':S.pay.method=v;renderModal();break;
+    case 'charge':if(totals().count){S.pay={method:'cash',recv:'',note:'',phone:'',redeem:null};openModal({type:'pay'})}break;
+    case 'method':S.pay.method=v;renderModal();updateChange();break;
+    case 'redeem':{
+      const m=findMember(S.pay.phone),r=m&&(S.cfg.rewards||[]).find(x=>x.id===v);
+      S.pay.redeem=(S.pay.redeem&&S.pay.redeem.id===v)?null:(r||null);
+      renderModal();updateChange();break;
+    }
     case 'quick':{const d=dueFor(totals().total,'cash').due;S.pay.recv=v==='exact'?d.toFixed(2):v;const r=$('#recv');if(r)r.value=S.pay.recv;updateChange();break}
     case 'confirm-pay':confirmPay();break;
     case 'close-modal':closeModal();break;
-    case 'print':try{window.print()}catch(e){toast('Printing is not available here.')}break;
+    case 'print':{const M=S.modal;if(M&&M.type==='receipt'){qpPrint(qpText(M.order))}else{try{window.print()}catch(e){toast('Printing is not available here.')}}break}
     case 'open-order':{const o=findOrder(id);if(o)openModal({type:'receipt',order:o,list:true});break}
     case 'void-ask':openModal({type:'void',order:S.modal.order});break;
     case 'back-receipt':openModal({type:'receipt',order:S.modal.order,list:true});break;
@@ -982,10 +1046,10 @@ function act(a,b){
     case 'add-reward':openModal({type:'reward',isNew:true,reward:{id:null,n:'',pts:''}});break;
     case 'edit-reward':{const r=S.cfg.rewards.find(x=>x.id===id);if(r)openModal({type:'reward',isNew:false,arm:false,reward:clone(r)});break}
     case 'save-reward':{
-      const M=S.modal,n=$('#rw-n').value.trim(),pts=parseInt($('#rw-p').value,10);
+      const M=S.modal,n=$('#rw-n').value.trim(),pts=parseInt($('#rw-p').value,10),val=parseFloat($('#rw-v').value);
       if(!n){toast('Enter what the reward is.');return}
       if(isNaN(pts)||pts<=0){toast('Enter a valid points amount.');return}
-      const r={id:M.reward.id||('r'+uid()),n:n,pts:pts};
+      const r={id:M.reward.id||('r'+uid()),n:n,pts:pts,val:isNaN(val)?0:r2(Math.max(0,val))};
       if(M.isNew)S.cfg.rewards.push(r);else S.cfg.rewards=S.cfg.rewards.map(x=>x.id===r.id?r:x);
       S.cfg.rewards.sort((a,b)=>a.pts-b.pts);
       saveCfg();closeModal();break;
@@ -1032,7 +1096,14 @@ document.addEventListener('input',e=>{
   const id=e.target.id;
   if(id==='recv'){S.pay.recv=e.target.value;updateChange()}
   else if(id==='note'){S.pay.note=e.target.value}
-  else if(id==='mphone'){S.pay.phone=e.target.value;const h=$('#mhint');if(h)h.innerHTML=memberHint(S.pay.phone)}
+  else if(id==='mphone'){
+    S.pay.phone=e.target.value;
+    const m=findMember(S.pay.phone);
+    if(S.pay.redeem&&(!m||m.points<S.pay.redeem.pts))S.pay.redeem=null;
+    const h=$('#mhint');if(h)h.innerHTML=memberHint(S.pay.phone);
+    const rb=$('#rewardBox');if(rb)rb.innerHTML=rewardPicker();
+    updateChange();
+  }
   else if(e.target.classList.contains('cin')&&S.modal){
     S.modal.counts[e.target.dataset.d]=Math.max(0,parseInt(e.target.value,10)||0);
     updateCount();
@@ -1149,3 +1220,5 @@ if(CUSTOMER_MODE){
 </script>
 </body>
 </html>
+
+</body></html>
