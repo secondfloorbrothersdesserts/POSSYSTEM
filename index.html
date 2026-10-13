@@ -762,6 +762,7 @@ function renderModal(){
     const o=M.order;
     inner='<div class="sheet" role="dialog" aria-modal="true" aria-label="Receipt"><div class="sheet-head"><h2>Order #'+o.no+'</h2><button class="x" data-act="close-modal" aria-label="Close">✕</button></div>'+
       '<div class="paper">'+receiptHTML(o)+'</div><div class="btnrow"><button class="btn primary" data-act="print">Print receipt</button>'+
+      '<button class="btn" data-act="usb-pair">Connect printer (once)</button>'+
       (M.list&&!o.void?'<button class="btn danger" data-act="void-ask">Void order</button>':'')+
       '<button class="btn" data-act="close-modal">'+(M.list?'Close':'New order')+'</button></div></div>';
   }else if(M.type==='void'){
@@ -877,6 +878,48 @@ function openDrawer(){
     const a=document.createElement('a');a.href='rawbt:base64,'+b64;
     document.body.appendChild(a);a.click();a.remove();
   }catch(e){}
+}
+let usbPrn=null,usbEP=null;
+async function usbFindEndpoint(dev){
+  for(const cfg of dev.configurations){
+    for(const itf of cfg.interfaces){
+      for(const alt of itf.alternates){
+        const out=(alt.endpoints||[]).find(e=>e.direction==='out');
+        if(out)return{cfg:cfg.configurationValue,itf:itf.interfaceNumber,ep:out.endpointNumber};
+      }
+    }
+  }
+  return null;
+}
+async function usbConnect(silent){
+  if(!navigator.usb){if(!silent)toast('This browser does not support direct USB printing.');return null}
+  try{
+    let dev=usbPrn;
+    if(!dev){
+      const known=await navigator.usb.getDevices();
+      dev=known[0];
+    }
+    if(!dev){
+      if(silent)return null;
+      dev=await navigator.usb.requestDevice({filters:[]});
+    }
+    await dev.open();
+    const info=await usbFindEndpoint(dev);
+    if(!info){if(!silent)toast('Could not find a USB print connection on that device.');return null}
+    if(!dev.configuration||dev.configuration.configurationValue!==info.cfg)await dev.selectConfiguration(info.cfg);
+    try{await dev.claimInterface(info.itf)}catch(e){}
+    usbPrn=dev;usbEP=info.ep;
+    return dev;
+  }catch(e){if(!silent)toast('Could not connect to the USB printer.');return null}
+}
+async function usbSend(bytes,silent){
+  const dev=await usbConnect(silent);
+  if(!dev)return false;
+  try{await dev.transferOut(usbEP,new Uint8Array(bytes));return true}
+  catch(e){if(!silent)toast('Could not reach the USB printer.');return false}
+}
+function usbKickAndCut(){
+  usbSend([0x1D,0x56,0x42,0x00,0x1B,0x70,0x00,0x19,0xFA],false).catch(function(){});
 }
 function saveMove(){
   const M=S.modal,amt=parseFloat($('#mv-a').value),s=curShift();
@@ -1015,7 +1058,8 @@ function act(a,b){
     case 'quick':{const d=dueFor(totals().total,'cash').due;S.pay.recv=v==='exact'?d.toFixed(2):v;const r=$('#recv');if(r)r.value=S.pay.recv;updateChange();break}
     case 'confirm-pay':confirmPay();break;
     case 'close-modal':closeModal();break;
-    case 'print':try{window.print()}catch(e){toast('Printing is not available here.')}break;
+    case 'print':try{window.print()}catch(e){toast('Printing is not available here.')}usbKickAndCut();break;
+    case 'usb-pair':usbConnect(false).then(d=>{if(d)toast('Printer connected. It will stay connected on this tablet.')});break;
     case 'open-order':{const o=findOrder(id);if(o)openModal({type:'receipt',order:o,list:true});break}
     case 'void-ask':openModal({type:'void',order:S.modal.order});break;
     case 'back-receipt':openModal({type:'receipt',order:S.modal.order,list:true});break;
