@@ -1,5 +1,4 @@
 
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <!doctype html>
 <html lang="en">
 <head>
@@ -1017,7 +1016,7 @@ function act(a,b){
     case 'quick':{const d=dueFor(totals().total,'cash').due;S.pay.recv=v==='exact'?d.toFixed(2):v;const r=$('#recv');if(r)r.value=S.pay.recv;updateChange();break}
     case 'confirm-pay':confirmPay();break;
     case 'close-modal':closeModal();break;
-    case 'print':{const M=S.modal;if(M&&M.type==='receipt'){qpPrint(qpText(M.order))}else{try{window.print()}catch(e){toast('Printing is not available here.')}}break}
+    case 'print':try{window.print()}catch(e){toast('Printing is not available here.')}break;
     case 'open-order':{const o=findOrder(id);if(o)openModal({type:'receipt',order:o,list:true});break}
     case 'void-ask':openModal({type:'void',order:S.modal.order});break;
     case 'back-receipt':openModal({type:'receipt',order:S.modal.order,list:true});break;
@@ -1222,5 +1221,3 @@ if(CUSTOMER_MODE){
 </script>
 </body>
 </html>
-
-</body></html>
