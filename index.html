@@ -633,10 +633,12 @@ function qpText(o){
   return t;
 }
 function qpPrint(text){
-  try{
-    const enc=encodeURI(text);
-    location.href='intent://'+enc+'#Intent;scheme=quickprinter;package=pe.diegoveloper.printerserverapp;end;';
-  }catch(e){toast('Could not reach the printer app.')}
+  const enc=encodeURI(text);
+  try{location.href='quickprinter://'+enc}
+  catch(e){
+    try{location.href='intent://'+enc+'#Intent;scheme=quickprinter;package=pe.diegoveloper.printerserverapp;end;'}
+    catch(e2){toast('Could not reach the printer app.')}
+  }
 }
 function syncPrint(){
   const M=S.modal;
