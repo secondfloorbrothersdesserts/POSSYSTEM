@@ -921,6 +921,95 @@ async function usbSend(bytes,silent){
 function usbKickAndCut(){
   usbSend([0x1D,0x56,0x42,0x00,0x1B,0x70,0x00,0x19,0xFA],false).catch(function(){});
 }
+function paperPx(){return S.cfg.paper==='80'?576:384}
+function drawReceiptCanvas(o){
+  const W=paperPx(),pad=6,lineH=26,bigH=32;
+  const rows=[];
+  rows.push({t:'c',bold:true,big:true,s:S.cfg.shop});
+  rows.push({t:'c',s:o.day+' '+timeStr(o.t)});
+  rows.push({t:'c',s:'Order #'+o.no+(o.note?' - '+o.note:'')});
+  if(o.void)rows.push({t:'c',bold:true,s:'VOID'});
+  rows.push({t:'line'});
+  o.lines.forEach(l=>{
+    rows.push({t:'l',s:l.n});
+    rows.push({t:'lr',l:l.q+' x '+Number(l.p).toFixed(2),r:(l.p*l.q).toFixed(2)});
+  });
+  rows.push({t:'line'});
+  rows.push({t:'lr',l:'Subtotal',r:o.sub.toFixed(2)});
+  if(o.disc>0)rows.push({t:'lr',l:'Discount',r:'-'+o.disc.toFixed(2)});
+  if(o.redeem)rows.push({t:'lr',l:'Reward: '+o.redeem.n+' (-'+o.redeem.pts+'pts)',r:'-'+Number(o.redeem.val).toFixed(2)});
+  if(o.tax>0)rows.push({t:'lr',l:'Tax '+o.taxPct+'%',r:o.tax.toFixed(2)});
+  if(o.rnd)rows.push({t:'lr',l:'Rounding',r:(o.rnd>0?'+':'')+o.rnd.toFixed(2)});
+  rows.push({t:'line'});
+  rows.push({t:'lr',bold:true,l:'Total (RM)',r:o.due.toFixed(2)});
+  rows.push({t:'line'});
+  rows.push({t:'lr',l:mLabel(o.method),r:o.recv.toFixed(2)});
+  if(o.method==='cash')rows.push({t:'lr',l:'Change',r:o.change.toFixed(2)});
+  rows.push({t:'line'});
+  rows.push({t:'c',s:'Thank you! 谢谢惠顾'});
+  const H=rows.reduce((h,r)=>h+(r.t==='line'?14:(r.big?bigH:lineH)),0)+pad*2;
+  const cv=document.createElement('canvas');
+  cv.width=W;cv.height=H;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#000';
+  ctx.textBaseline='top';
+  let y=pad;
+  rows.forEach(r=>{
+    if(r.t==='line'){ctx.fillRect(pad,y+6,W-pad*2,2);y+=14;return}
+    const fs=r.big?22:15;
+    ctx.font=(r.bold?'bold ':'')+fs+'px sans-serif';
+    if(r.t==='c'){
+      const w=ctx.measureText(r.s).width;
+      ctx.fillText(r.s,Math.max(pad,(W-w)/2),y);
+    }else if(r.t==='l'){
+      ctx.fillText(r.s,pad,y);
+    }else if(r.t==='lr'){
+      ctx.fillText(r.l,pad,y);
+      const w=ctx.measureText(r.r).width;
+      ctx.fillText(r.r,W-pad-w,y);
+    }
+    y+=r.big?bigH:lineH;
+  });
+  return cv;
+}
+function canvasToRaster(cv){
+  const W=cv.width,H=cv.height;
+  const img=cv.getContext('2d').getImageData(0,0,W,H).data;
+  const bpr=Math.ceil(W/8),data=[];
+  for(let y=0;y<H;y++){
+    for(let bx=0;bx<bpr;bx++){
+      let byte=0;
+      for(let bit=0;bit<8;bit++){
+        const x=bx*8+bit;
+        let on=0;
+        if(x<W){
+          const idx=(y*W+x)*4;
+          const lum=(img[idx]+img[idx+1]+img[idx+2])/3;
+          on=(img[idx+3]>128&&lum<160)?1:0;
+        }
+        byte=(byte<<1)|on;
+      }
+      data.push(byte);
+    }
+  }
+  return [0x1D,0x76,0x30,0x00,bpr&0xff,(bpr>>8)&0xff,H&0xff,(H>>8)&0xff].concat(data);
+}
+async function usbPrintReceipt(o){
+  let cv;
+  try{cv=drawReceiptCanvas(o)}catch(e){toast('Could not build the receipt image.');return false}
+  const raster=canvasToRaster(cv);
+  const bytes=[0x1B,0x40].concat(raster,[0x0A,0x0A,0x0A,0x1D,0x56,0x42,0x00,0x1B,0x70,0x00,0x19,0xFA]);
+  const dev=await usbConnect(false);
+  if(!dev){toast('Could not reach the USB printer.');return false}
+  const CH=16384;
+  try{
+    for(let i=0;i<bytes.length;i+=CH){
+      await dev.transferOut(usbEP,new Uint8Array(bytes.slice(i,i+CH)));
+    }
+    return true;
+  }catch(e){toast('Could not print to the USB printer.');return false}
+}
 function saveMove(){
   const M=S.modal,amt=parseFloat($('#mv-a').value),s=curShift();
   if(!s){toast('Open the till first.');return}
@@ -1058,7 +1147,12 @@ function act(a,b){
     case 'quick':{const d=dueFor(totals().total,'cash').due;S.pay.recv=v==='exact'?d.toFixed(2):v;const r=$('#recv');if(r)r.value=S.pay.recv;updateChange();break}
     case 'confirm-pay':confirmPay();break;
     case 'close-modal':closeModal();break;
-    case 'print':try{window.print()}catch(e){toast('Printing is not available here.')}usbKickAndCut();break;
+    case 'print':{
+      const M=S.modal;
+      if(M&&M.type==='receipt'&&navigator.usb){usbPrintReceipt(M.order)}
+      else{try{window.print()}catch(e){toast('Printing is not available here.')}}
+      break;
+    }
     case 'usb-pair':usbConnect(false).then(d=>{if(d)toast('Printer connected. It will stay connected on this tablet.')});break;
     case 'open-order':{const o=findOrder(id);if(o)openModal({type:'receipt',order:o,list:true});break}
     case 'void-ask':openModal({type:'void',order:S.modal.order});break;
