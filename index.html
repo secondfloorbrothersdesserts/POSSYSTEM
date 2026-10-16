@@ -544,4 +544,817 @@ function ordersView(){
     '<button class="btn" style="width:100%;margin-top:8px" data-act="range" data-v="custom">'+(rmode==='custom'?'Custom: '+esc(from)+' to '+esc(to):'Choose a custom range')+'</button>'+
     (rmode==='day'?'<div class="daybar" style="margin-top:10px"><button data-act="day-prev" aria-label="Previous day">‹</button><input type="date" id="viewDay" value="'+esc(S.viewDay)+'" aria-label="Day"><button data-act="day-next" aria-label="Next day">›</button>'+
       (S.viewDay!==dayKey()?'<button data-act="day-today">Today</button>':'')+'</div>':'')+
-    (rmode==='custom'?'<div class="daybar" style="margin-top:10px"><input type="date"
+    (rmode==='custom'?'<div class="daybar" style="margin-top:10px"><input type="date" id="rangeFrom" value="'+esc(S.range.from)+'" aria-label="From"><span>to</span><input type="date" id="rangeTo" value="'+esc(S.range.to)+'" aria-label="To"></div>':'')+
+    '<div class="hero" style="margin-top:12px"><div><span class="lbl">'+heroLbl+'</span><strong>'+rm(sum)+'</strong></div><div>'+live.length+' order'+(live.length===1?'':'s')+'</div></div>'+
+    '<div class="two"><section class="card"><h2>By payment method</h2>'+(rowsM||'<p class="hint">No sales yet.</p>')+'</section>'+
+    '<section class="card"><h2>Best sellers</h2>'+(rowsT||'<p class="hint">No sales yet.</p>')+'</section></div>'+
+    (multi?'<section class="card"><h2>By day</h2>'+(dayRows||'<p class="hint">No sales yet.</p>')+'</section>':'')+
+    '<section class="card"><div class="cardhead"><h2>Orders</h2>'+(DL?'<button class="btn" data-act="export">Export CSV</button>':'')+'</div>'+
+    (multi?'<p class="hint">Showing a date range — open the CSV export for the full order list, or switch to Day view to see individual orders.</p>':
+    (list.map(o=>'<button class="orow'+(o.void?' void':'')+'" data-act="open-order" data-id="'+esc(o.id)+'">'+
+      '<span class="h">'+timeStr(o.t)+'  #'+o.no+(o.void?'<span class="tag">Void</span>':'')+'</span>'+
+      '<span class="s">'+esc(o.lines.map(l=>l.n+' ×'+l.q).join(', '))+'</span>'+
+      '<span class="a">'+rm(o.due)+'<br><small>'+esc(mLabel(o.method))+'</small></span></button>').join('')||'<p class="hint">No orders on this day.</p>'))+
+    '</section></div></div>';
+}
+function menuView(){
+  const cats=catList();
+  return '<div class="page" data-keep="page"><div class="wrap">'+
+    '<section class="card"><h2>Shop settings</h2>'+
+    '<label class="fld">Shop name<input id="cfgShop" value="'+esc(S.cfg.shop)+'"></label>'+
+    '<label class="fld">Tax percentage (0 for none)<input id="cfgTax" inputmode="decimal" value="'+(S.cfg.taxPct||0)+'"></label>'+
+    '<label class="fld">Receipt paper<select id="cfgPaper"><option value="58"'+(S.cfg.paper==='58'?' selected':'')+'>58 mm</option><option value="80"'+(S.cfg.paper==='80'?' selected':'')+'>80 mm</option></select></label>'+
+    '<label class="chk"><input type="checkbox" id="cfgRound"'+(S.cfg.round5?' checked':'')+'>Round cash totals to the nearest 5 sen</label>'+
+    '<label class="fld">Membership points earned per RM 1 spent (0 to disable)<input id="cfgPts" inputmode="decimal" value="'+(S.cfg.ptsPerRM||0)+'"></label>'+
+    '<label class="fld">Takeaway surcharge, per item (RM, 0 for none)<input id="cfgTake" inputmode="decimal" value="'+(S.cfg.takeFee||0)+'"></label>'+
+    '<button class="btn primary" style="width:100%;margin-top:4px" data-act="load-real-menu">'+(S.loadArm?'Tap again to replace items with your real menu':'Load real menu with photos')+'</button>'+
+    '<button class="btn" style="width:100%;margin-top:8px" data-act="load-real-menu-noimg">'+(S.loadArmN?'Tap again to replace items (text only, no photos)':'Load real menu — text only, no photos')+'</button>'+
+    (S.loadArm||S.loadArmN?'<p class="hint">This replaces all current items and add-ons with your 二佬糖水铺 menu. Tap the same button again to confirm.</p>':'')+
+    '</section>'+
+    '<section class="card"><div class="cardhead"><h2>Rewards</h2><button class="btn primary" data-act="add-reward">Add reward</button></div>'+
+    (S.cfg.rewards.map(r=>'<button class="irow" data-act="edit-reward" data-id="'+esc(r.id)+'"><span class="in">'+esc(r.n)+'</span><span class="so"></span><span class="ip">'+r.pts+' pts</span></button>').join('')||'<p class="hint">No rewards yet.</p>')+
+    '<p class="hint">These show on your customers\' points page, so they know what their points can be used for.</p></section>'+
+    '<section class="card"><div class="cardhead"><h2>Add-on categories</h2><button class="btn primary" data-act="add-group">Add category</button></div>'+
+    (S.cfg.groups.map(g=>'<button class="irow" data-act="edit-group" data-id="'+esc(g.id)+'"><span class="in">'+esc(g.n)+'<small>'+(g.type==='single'?'Pick one':'Pick any')+' · '+(g.opts||[]).length+' option'+((g.opts||[]).length===1?'':'s')+'</small></span><span class="so"></span><span></span></button>').join('')||'<p class="hint">No add-on categories yet.</p>')+
+    '<p class="hint">Make categories like "Toppings" (pick any) or "Ginger level" (pick one), then tick which categories each item offers when you edit that item below.</p></section>'+
+    '<section class="card"><div class="cardhead"><h2>Items</h2><button class="btn primary" data-act="add-item">Add item</button></div>'+
+    (cats.map(c=>'<h3>'+esc(c)+'</h3>'+S.cfg.items.filter(i=>(i.c||'Other')===c).map(i=>
+      '<button class="irow" data-act="edit-item" data-id="'+esc(i.id)+'"><span class="in">'+esc(i.n)+'<small>'+esc(i.e||'')+'</small></span><span class="so">'+(i.off?'Sold out':'')+'</span><span class="ip">'+Number(i.p).toFixed(2)+'</span></button>').join('')).join('')||'<p class="hint">No items yet.</p>')+
+    '<p class="hint">The starting menu and prices are samples. Tap any item to change its name, price or category.</p></section></div></div>';
+}
+function render(){
+  const keep={};document.querySelectorAll('[data-keep]').forEach(el=>{keep[el.dataset.keep]=el.scrollTop});
+  if(S.tab!=='sell')S.cartOpen=false;
+  $('#view').innerHTML=S.tab==='sell'?sellView():S.tab==='orders'?ordersView():S.tab==='till'?tillView():S.tab==='members'?membersView():menuView();
+  document.querySelectorAll('[data-keep]').forEach(el=>{if(keep[el.dataset.keep]!=null)el.scrollTop=keep[el.dataset.keep]});
+  paintHead();
+}
+function softRender(){
+  if(S.modal&&(S.modal.type==='pay'||S.modal.type==='edit'||S.modal.type==='count'||S.modal.type==='move'||S.modal.type==='addon'||S.modal.type==='gaddon'||S.modal.type==='reward')){S.stale=true;paintHead();return}
+  render();
+}
+
+/* ---------- receipt ---------- */
+function receiptHTML(o){
+  const R=(a,b,c)=>'<div class="r '+(c||'')+'"><span>'+a+'</span><span>'+b+'</span></div>';
+  let h='<div class="receipt" style="--rw:'+(S.cfg.paper==='80'?72:48)+'mm"><h3>'+esc(S.cfg.shop)+'</h3>'+
+    '<div class="c">'+esc(o.day)+' '+timeStr(o.t)+'</div><div class="c">Order #'+o.no+(o.note?' - '+esc(o.note):'')+'</div>'+
+    (o.void?'<div class="c b">VOID</div>':'')+'<hr>';
+  o.lines.forEach(l=>{h+='<div>'+esc(l.n)+'</div>'+R(l.q+' x '+Number(l.p).toFixed(2),(l.p*l.q).toFixed(2))});
+  h+='<hr>'+R('Subtotal',o.sub.toFixed(2));
+  if(o.disc>0)h+=R('Discount','-'+o.disc.toFixed(2));
+  if(o.redeem)h+=R('Reward: '+esc(o.redeem.n)+' (-'+o.redeem.pts+'pts)','-'+Number(o.redeem.val).toFixed(2));
+  if(o.tax>0)h+=R('Tax '+o.taxPct+'%',o.tax.toFixed(2));
+  if(o.rnd)h+=R('Rounding',(o.rnd>0?'+':'')+o.rnd.toFixed(2));
+  h+=R('Total (RM)',o.due.toFixed(2),'b')+'<hr>'+R(esc(mLabel(o.method)),o.recv.toFixed(2));
+  if(o.method==='cash')h+=R('Change',o.change.toFixed(2));
+  return h+'<hr><div class="c">Thank you! 谢谢惠顾</div></div>';
+}
+function qpText(o){
+  let t='<CENTER><BIG>'+S.cfg.shop+'<BR>';
+  t+='<CENTER>'+o.day+' '+timeStr(o.t)+'<BR>';
+  t+='<CENTER>Order #'+o.no+(o.note?' - '+o.note:'')+'<BR>';
+  if(o.void)t+='<CENTER><BOLD>VOID<NORMAL><BR>';
+  t+='<LINE><BR><LEFT>';
+  o.lines.forEach(l=>{t+=l.n+'<BR>'+l.q+' x '+Number(l.p).toFixed(2)+';;'+(l.p*l.q).toFixed(2)+'<BR>'});
+  t+='<LINE><BR>';
+  t+='Subtotal;;'+o.sub.toFixed(2)+'<BR>';
+  if(o.disc>0)t+='Discount;;-'+o.disc.toFixed(2)+'<BR>';
+  if(o.redeem)t+='Reward: '+o.redeem.n+' (-'+o.redeem.pts+'pts);;-'+Number(o.redeem.val).toFixed(2)+'<BR>';
+  if(o.tax>0)t+='Tax '+o.taxPct+'%;;'+o.tax.toFixed(2)+'<BR>';
+  if(o.rnd)t+='Rounding;;'+(o.rnd>0?'+':'')+o.rnd.toFixed(2)+'<BR>';
+  t+='<LINE><BR><BOLD>Total (RM);;'+o.due.toFixed(2)+'<NORMAL><BR><LINE><BR>';
+  t+=mLabel(o.method)+';;'+o.recv.toFixed(2)+'<BR>';
+  if(o.method==='cash')t+='Change;;'+o.change.toFixed(2)+'<BR>';
+  t+='<CENTER>Thank you! 谢谢惠顾<BR>';
+  t+='<DRAWER><CUT>';
+  return t;
+}
+function qpPrint(text){
+  const enc=encodeURI(text);
+  try{location.href='quickprinter://'+enc}
+  catch(e){
+    try{location.href='intent://'+enc+'#Intent;scheme=quickprinter;package=pe.diegoveloper.printerserverapp;end;'}
+    catch(e2){toast('Could not reach the printer app.')}
+  }
+}
+function syncPrint(){
+  const M=S.modal;
+  $('#printArea').innerHTML=M&&M.type==='receipt'?receiptHTML(M.order):M&&M.type==='report'?reportHTML(M.shift):'';
+  $('#pageStyle').textContent='@page{size:'+(S.cfg.paper==='80'?80:58)+'mm auto;margin:0}';
+}
+
+/* ---------- modals ---------- */
+const HINTS={online:'For DuitNow QR, e-wallet, bank transfer, or card. Mark as paid once the payment comes through.',others:'For anything else — vouchers, staff meals, complimentary, etc.'};
+function payModal(){
+  const {t,eff}=payTotal(),p=S.pay,d=dueFor(eff,p.method);
+  let quick='';
+  if(p.method==='cash'){
+    const notes=[5,10,20,50,100].filter(n=>n>=d.due).slice(0,3);
+    quick='<label class="fld">Cash received<input id="recv" inputmode="decimal" autocomplete="off" value="'+esc(p.recv)+'" placeholder="0.00"></label>'+
+      '<div class="quick"><button data-act="quick" data-v="exact">Exact</button>'+notes.map(n=>'<button data-act="quick" data-v="'+n+'">'+n+'</button>').join('')+'</div>'+
+      '<div class="chg"><span>Change</span><strong id="chg">—</strong></div>';
+  }else quick='<p class="hint">'+HINTS[p.method]+'</p>';
+  return '<div class="sheet" role="dialog" aria-modal="true" aria-label="Take payment">'+
+    '<div class="due"><span>Amount due</span><strong id="dueAmt">'+rm(d.due)+'</strong>'+
+    '<small id="dueNote">'+(p.redeem?esc(p.redeem.n)+' applied, −'+rm(p.redeem.val)+(d.rnd?' · rounded':''):(d.rnd?'Rounded from '+rm(eff):''))+'</small></div>'+
+    '<div class="sheet-head"><h2>Payment</h2><button class="x" data-act="close-modal" aria-label="Close">✕</button></div>'+
+    '<div class="seg3">'+METHODS.map(m=>'<button class="'+(p.method===m[0]?'on':'')+'" data-act="method" data-v="'+m[0]+'">'+m[1]+'</button>').join('')+'</div>'+
+    quick+
+    '<label class="fld">Member phone (optional)<input id="mphone" inputmode="numeric" autocomplete="off" value="'+esc(p.phone)+'" placeholder="e.g. 0123456789"></label>'+
+    '<div id="mhint">'+memberHint(p.phone)+'</div>'+
+    '<div id="rewardBox">'+rewardPicker()+'</div>'+
+    '<label class="fld">Note (optional)<input id="note" maxlength="60" autocomplete="off" value="'+esc(p.note)+'" placeholder="Name or table"></label>'+
+    '<button class="charge" id="confirmPay" style="width:100%;margin:6px 0 0" data-act="confirm-pay">Mark as paid</button></div>';
+}
+function memberHint(phone){
+  const t=totals(),earn=Math.floor(t.total*(S.cfg.ptsPerRM||0));
+  const m=findMember(phone);
+  if(normPhone(phone)&&normPhone(phone).length<7)return '';
+  if(m)return '<p class="hint">'+esc(m.name||'Member')+' has '+(m.points||0)+' points. This order adds '+earn+'.</p>';
+  if(normPhone(phone))return '<p class="hint">New member — this order starts them with '+earn+' points.</p>';
+  return '<p class="hint">Leave blank for a walk-in with no points.</p>';
+}
+function rewardPicker(){
+  const p=S.pay,m=findMember(p.phone);
+  if(!m)return'';
+  const avail=(S.cfg.rewards||[]).filter(r=>m.points>=r.pts);
+  if(!avail.length)return'';
+  return '<h3>Redeem a reward</h3><div class="quick">'+avail.map(r=>'<button class="'+(p.redeem&&p.redeem.id===r.id?'on':'')+'" data-act="redeem" data-v="'+esc(r.id)+'">'+esc(r.n)+' ('+r.pts+' pts)</button>').join('')+'</div>';
+}
+function updateChange(){
+  if(!S.pay)return;
+  const {eff}=payTotal(),d=dueFor(eff,S.pay.method),p=S.pay;
+  const da=$('#dueAmt');if(da)da.textContent=rm(d.due);
+  const dn=$('#dueNote');if(dn)dn.textContent=p.redeem?(p.redeem.n+' applied, −'+rm(p.redeem.val)+(d.rnd?' · rounded':'')):(d.rnd?'Rounded from '+rm(eff):'');
+  let ok=true;
+  if(S.pay.method==='cash'){
+    const recv=parseFloat(S.pay.recv);
+    ok=!isNaN(recv)&&recv>=d.due;
+    const c=$('#chg');if(c)c.textContent=ok?rm(recv-d.due):'—';
+  }
+  const b=$('#confirmPay');if(b)b.disabled=!ok;
+}
+function addonModal(){
+  const M=S.modal,it=item(M.id);
+  const groups=(it.addons||[]).map(groupOf).filter(Boolean);
+  let rows='';
+  groups.forEach(g=>{
+    rows+='<h3>'+esc(g.n)+'</h3>';
+    if(g.type==='single')rows+='<div class="seg" style="flex-wrap:wrap">'+(g.opts||[]).map(o=>'<button class="'+((M.sel[g.id]||[])[0]===o.id?'on':'')+'" data-act="gopt" data-g="'+esc(g.id)+'" data-v="'+esc(o.id)+'" data-single="1">'+esc(o.n)+(o.p?' +'+Number(o.p).toFixed(2):'')+'</button>').join('')+'</div>';
+    else rows+=(g.opts||[]).map(o=>'<label class="chk"><input type="checkbox" class="gopt" data-g="'+esc(g.id)+'" data-v="'+esc(o.id)+'"'+((M.sel[g.id]||[]).includes(o.id)?' checked':'')+'> '+esc(o.n)+' (+'+Number(o.p).toFixed(2)+')</label>').join('');
+  });
+  return '<div class="sheet" role="dialog" aria-modal="true" aria-label="Item options"><div class="sheet-head"><h2>'+esc(it.n)+'</h2><button class="x" data-act="close-modal" aria-label="Close">✕</button></div>'+
+    (rows?'<p class="hint" style="margin:0 0 10px">Choose add-ons for this item.</p>'+rows:'')+
+    '<h3 style="margin-top:'+(rows?'14px':'0')+'">Dine in or takeaway?</h3>'+
+    '<div class="seg"><button class="'+(M.ta==='dine'?'on':'')+'" data-act="ta" data-v="dine">Dine in</button><button class="'+(M.ta==='take'?'on':'')+'" data-act="ta" data-v="take">Takeaway +'+Number(S.cfg.takeFee||0).toFixed(2)+'</button></div>'+
+    '<button class="charge" style="width:100%;margin:14px 0 0" data-act="addon-confirm">Add to order</button></div>';
+}
+function rewardModal(){
+  const M=S.modal,r=M.reward,isNew=M.isNew;
+  return '<div class="sheet" role="dialog" aria-modal="true" aria-label="Reward"><div class="sheet-head"><h2>'+(isNew?'Add reward':'Edit reward')+'</h2><button class="x" data-act="close-modal" aria-label="Close">✕</button></div>'+
+    '<label class="fld">What they get<input id="rw-n" value="'+esc(r.n)+'" autocomplete="off" placeholder="Free red bean soup"></label>'+
+    '<label class="fld">Points needed<input id="rw-p" inputmode="numeric" value="'+esc(r.pts)+'" autocomplete="off" placeholder="100"></label>'+
+    '<label class="fld">Value off the bill (RM, 0 if it\'s not a discount)<input id="rw-v" inputmode="decimal" value="'+esc(r.val||0)+'" autocomplete="off" placeholder="5.90"></label>'+
+    '<div class="btnrow" style="margin-top:12px"><button class="btn primary" data-act="save-reward">Save</button>'+
+    (isNew?'':'<button class="btn danger" data-act="del-reward">'+(M.arm?'Tap again to delete':'Delete')+'</button>')+
+    '<button class="btn" data-act="close-modal">Cancel</button></div></div>';
+}
+function gaddonModal(){
+  const M=S.modal,g=M.group,isNew=M.isNew;
+  return '<div class="sheet" role="dialog" aria-modal="true" aria-label="Add-on category"><div class="sheet-head"><h2>'+(isNew?'Add category':'Edit category')+'</h2><button class="x" data-act="close-modal" aria-label="Close">✕</button></div>'+
+    '<label class="fld">Category name<input id="gg-n" value="'+esc(g.n)+'" autocomplete="off" placeholder="Ginger level"></label>'+
+    '<h3>Customer can choose</h3><div class="seg"><button class="'+(g.type==='multi'?'on':'')+'" data-act="gtype" data-v="multi">Any number</button><button class="'+(g.type==='single'?'on':'')+'" data-act="gtype" data-v="single">Just one</button></div>'+
+    '<label class="fld">Options (name:price, comma separated — use 0 for no extra charge)<input id="gg-o" value="'+esc(optsToText(g.opts))+'" autocomplete="off" placeholder="None:0, Light:0, Extra:0.50"></label>'+
+    '<div class="btnrow" style="margin-top:12px"><button class="btn primary" data-act="save-group">Save</button>'+
+    (isNew?'':'<button class="btn danger" data-act="del-group">'+(M.arm?'Tap again to delete':'Delete')+'</button>')+
+    '<button class="btn" data-act="close-modal">Cancel</button></div></div>';
+}
+function editModal(){
+  const M=S.modal,it=M.item,isNew=M.isNew;
+  return '<div class="sheet" role="dialog" aria-modal="true" aria-label="Item">'+
+    '<div class="sheet-head"><h2>'+(isNew?'Add item':'Edit item')+'</h2><button class="x" data-act="close-modal" aria-label="Close">✕</button></div>'+
+    '<label class="fld">Name<input id="ef-n" value="'+esc(it.n)+'" autocomplete="off"></label>'+
+    '<label class="fld">English name (optional)<input id="ef-e" value="'+esc(it.e||'')+'" autocomplete="off"></label>'+
+    '<label class="fld">Price (RM)<input id="ef-p" inputmode="decimal" value="'+esc(it.p)+'" autocomplete="off"></label>'+
+    '<label class="fld">Category<input id="ef-c" list="catlist" value="'+esc(it.c||'')+'" autocomplete="off"></label>'+
+    '<datalist id="catlist">'+catList().map(c=>'<option value="'+esc(c)+'">').join('')+'</datalist>'+
+    '<h3>Add-on categories for this item</h3>'+(S.cfg.groups.length?S.cfg.groups.map(g=>'<label class="chk"><input type="checkbox" class="iaopt" data-aid="'+esc(g.id)+'"'+(M.sel.includes(g.id)?' checked':'')+'> '+esc(g.n)+' ('+(g.type==='single'?'pick one':'pick any')+')</label>').join(''):'<p class="hint">No add-on categories set up yet — add them once from the Menu tab\'s Add-on categories section, then tick them here.</p>')+
+    '<label class="chk"><input type="checkbox" id="ef-off"'+(it.off?' checked':'')+'>Sold out</label>'+
+    '<div class="btnrow"><button class="btn primary" data-act="save-item">Save</button>'+
+    (isNew?'':'<button class="btn danger" data-act="del-item">'+(S.modal.arm?'Tap again to delete':'Delete')+'</button>')+
+    '<button class="btn" data-act="close-modal">Cancel</button></div></div>';
+}
+function renderModal(){
+  const m=$('#modal'),M=S.modal;
+  if(!M){m.hidden=true;m.innerHTML='';syncPrint();return}
+  let inner='';
+  if(M.type==='pay')inner=payModal();
+  else if(M.type==='edit')inner=editModal();
+  else if(M.type==='addon')inner=addonModal();
+  else if(M.type==='gaddon')inner=gaddonModal();
+  else if(M.type==='reward')inner=rewardModal();
+  else if(M.type==='count')inner=countModal();
+  else if(M.type==='move')inner=moveModal();
+  else if(M.type==='report')inner=reportModal();
+  else if(M.type==='member')inner=memberModal();
+  else if(M.type==='receipt'){
+    const o=M.order;
+    inner='<div class="sheet" role="dialog" aria-modal="true" aria-label="Receipt"><div class="sheet-head"><h2>Order #'+o.no+'</h2><button class="x" data-act="close-modal" aria-label="Close">✕</button></div>'+
+      '<div class="paper">'+receiptHTML(o)+'</div><div class="btnrow"><button class="btn primary" data-act="print">Print receipt</button>'+
+      '<button class="btn" data-act="usb-pair">Connect printer (once)</button>'+
+      (M.list&&!o.void?'<button class="btn danger" data-act="void-ask">Void order</button>':'')+
+      '<button class="btn" data-act="close-modal">'+(M.list?'Close':'New order')+'</button></div></div>';
+  }else if(M.type==='void'){
+    inner='<div class="sheet" role="dialog" aria-modal="true" aria-label="Void order"><div class="sheet-head"><h2>Void order #'+M.order.no+'?</h2></div>'+
+      '<p class="hint" style="margin:0 0 16px">The order stays in the list but is not counted in sales.</p>'+
+      '<div class="btnrow"><button class="btn danger" data-act="void-do">Void order</button><button class="btn" data-act="back-receipt">Keep order</button></div></div>';
+  }
+  m.hidden=false;m.innerHTML=inner;syncPrint();
+  if(M.type==='pay')updateChange();
+  if(M.type==='count')updateCount();
+}
+function openModal(m){S.modal=m;renderModal()}
+function closeModal(){
+  S.modal=null;S.pay=null;renderModal();
+  S.stale=false;render();
+}
+
+/* ---------- till: open, cash movements, close ---------- */
+function gateView(){
+  return '<div class="page"><div class="wrap"><section class="card gate"><h2>Count the drawer to open the till</h2>'+
+    '<p class="hint" style="margin:8px 0 16px">Count the cash in the drawer first. Selling unlocks once the till is open.</p>'+
+    '<button class="charge" style="width:100%;margin:0" data-act="open-till">Count opening cash</button></section></div></div>';
+}
+function tillView(){
+  const s=curShift();
+  let top='';
+  if(s){
+    const f=shiftFigures(s);
+    const mv=(s.moves||[]).map(m=>'<div class="kv"><span>'+timeStr(m.t)+'  '+esc(m.note||(m.amt<0?'Cash out':'Cash in'))+'</span><span>'+(m.amt<0?'−':'+')+rm(Math.abs(m.amt))+'</span></div>').join('');
+    top='<div class="hero"><div><span class="lbl">Cash that should be in the drawer</span><strong>'+rm(f.expected)+'</strong></div></div>'+
+      '<section class="card"><h2>This till</h2>'+
+      '<div class="kv"><span>Opened</span><span>'+esc(s.day)+' '+timeStr(s.open.t)+'</span></div>'+
+      '<div class="kv"><span>Opening float</span><span>'+rm(s.open.total)+'</span></div>'+
+      '<div class="kv"><span>Cash sales</span><span>'+rm(f.cash)+'</span></div>'+
+      '<div class="kv"><span>Cash in and out</span><span>'+(f.moves<0?'−':'')+rm(Math.abs(f.moves))+'</span></div>'+
+      '<div class="kv"><span>Other payments (not in drawer)</span><span>'+rm(r2(f.sales-f.cash))+'</span></div>'+
+      (mv?'<h3>Cash in and out</h3>'+mv:'')+
+      '<div class="btnrow" style="margin-top:14px"><button class="btn" data-act="add-move">Cash in or out</button><button class="btn primary" data-act="close-till">Count and close till</button></div></section>';
+  }else{
+    top='<section class="card gate"><h2>The till is closed</h2><p class="hint" style="margin:8px 0 16px">Count the cash in the drawer to open it and start selling.</p>'+
+      '<button class="charge" style="width:100%;margin:0" data-act="open-till">Count opening cash</button></section>';
+  }
+  const past=Object.values(S.shifts).filter(x=>x.close).sort((a,b)=>b.close.t.localeCompare(a.close.t)).slice(0,14).map(x=>{
+    const d=x.close.diff;
+    return '<button class="orow" data-act="open-report" data-id="'+esc(x.id)+'"><span class="h">'+esc(x.day)+'  '+timeStr(x.open.t)+' to '+timeStr(x.close.t)+'</span>'+
+      '<span class="s">'+x.close.orders+' order'+(x.close.orders===1?'':'s')+', '+(d===0?'balanced':(d>0?'over ':'short ')+rm(Math.abs(d)))+'</span>'+
+      '<span class="a">'+rm(x.close.sales)+'</span></button>';
+  }).join('');
+  return '<div class="page" data-keep="page"><div class="wrap">'+top+
+    '<section class="card"><h2>Closed tills</h2>'+(past||'<p class="hint">Closed tills and their reports will show here.</p>')+'</section></div></div>';
+}
+function countModal(){
+  const M=S.modal,open=M.mode==='open';
+  const s=curShift(),exp=s?shiftFigures(s).expected:0;
+  const rows=DENOMS.map(d=>{
+    const k=Math.round(d*100);
+    return '<div class="crow"><label for="c'+k+'">'+(d>=1?'RM '+d:k+' sen')+'</label>'+
+      '<input class="cin" id="c'+k+'" data-d="'+k+'" inputmode="numeric" autocomplete="off" placeholder="0" value="'+(M.counts[k]||'')+'">'+
+      '<span class="st" id="s'+k+'">'+rm(k/100*(M.counts[k]||0))+'</span></div>';
+  }).join('');
+  return '<div class="sheet" role="dialog" aria-modal="true" aria-label="Count cash">'+
+    '<div class="sheet-head"><h2>'+(open?'Count opening cash':'Count and close till')+'</h2><button class="x" data-act="close-modal" aria-label="Close">✕</button></div>'+
+    '<p class="hint" style="margin:0 0 8px">Enter how many of each note or coin are in the drawer.</p>'+rows+
+    '<div class="due" style="margin-top:14px"><span>'+(open?'Opening cash counted':'Cash counted')+'</span><strong id="ctot">RM 0.00</strong></div>'+
+    (open?'':'<div class="kv"><span>Should be</span><span>'+rm(exp)+'</span></div><div class="kv"><span>Difference</span><span class="diff" id="cdiff">—</span></div>')+
+    '<label class="fld">Note (optional)<input id="cnote" maxlength="80" autocomplete="off" value="'+esc(M.note||'')+'"></label>'+
+    '<button class="charge" id="confirmCount" style="width:100%;margin:6px 0 0" data-act="count-confirm">'+(open?'Open till':'Close till')+'</button></div>';
+}
+function updateCount(){
+  const M=S.modal;if(!M||M.type!=='count')return;
+  const total=countTotal(M.counts);
+  DENOMS.forEach(d=>{const k=Math.round(d*100);const el=$('#s'+k);if(el)el.textContent=rm(k/100*(M.counts[k]||0))});
+  const t=$('#ctot');if(t)t.textContent=rm(total);
+  let ok=total>0;
+  if(M.mode==='close'){
+    const s=curShift(),exp=s?shiftFigures(s).expected:0,diff=r2(total-exp),el=$('#cdiff');
+    if(el){el.textContent=diff===0?'Balanced':(diff>0?'Over ':'Short ')+rm(Math.abs(diff));el.classList.toggle('bad',diff!==0)}
+    ok=total>0||exp<=0;
+  }
+  const b=$('#confirmCount');if(b)b.disabled=!ok;
+}
+function countConfirm(){
+  const M=S.modal,total=countTotal(M.counts),note=($('#cnote')||{value:''}).value.trim();
+  const counts={};Object.keys(M.counts).forEach(k=>{if(M.counts[k]>0)counts[k]=M.counts[k]});
+  if(M.mode==='open'){
+    if(total<=0)return;
+    const id=dayKey()+'_'+uid().slice(0,4);
+    S.shifts[id]={id:id,day:dayKey(),open:{t:new Date().toISOString(),counts:counts,total:total,note:note},moves:[],close:null};
+    saveShift(id);closeModal();toast('Till open. You can start selling.');
+  }else{
+    const s=curShift();if(!s)return;
+    const f=shiftFigures(s);
+    s.close={t:new Date().toISOString(),counts:counts,total:total,expected:f.expected,diff:r2(total-f.expected),note:note,sales:f.sales,by:f.by,orders:f.os.length};
+    saveShift(s.id);
+    S.cart=[];S.disc={t:'pct',v:0};S.cartOpen=false;
+    openModal({type:'report',shift:s});render();
+  }
+}
+function moveModal(){
+  const M=S.modal;
+  return '<div class="sheet" role="dialog" aria-modal="true" aria-label="Cash in or out">'+
+    '<div class="sheet-head"><h2>Cash in or out</h2><button class="x" data-act="close-modal" aria-label="Close">✕</button></div>'+
+    '<div class="seg"><button class="'+(M.kind==='in'?'on':'')+'" data-act="mtype" data-v="in">Cash in</button><button class="'+(M.kind==='out'?'on':'')+'" data-act="mtype" data-v="out">Cash out</button></div>'+
+    '<label class="fld">Amount (RM)<input id="mv-a" inputmode="decimal" autocomplete="off" value="'+esc(M.a)+'" placeholder="0.00"></label>'+
+    '<label class="fld">Note<input id="mv-n" maxlength="60" autocomplete="off" value="'+esc(M.n)+'" placeholder="For example: bought ice"></label>'+
+    '<button class="charge" style="width:100%;margin:6px 0 0" data-act="save-move">Save</button></div>';
+}
+function openDrawer(){
+  try{
+    const bytes=[0x1B,0x70,0x00,0x19,0xFA];
+    let bin='';bytes.forEach(b=>bin+=String.fromCharCode(b));
+    const b64=btoa(bin);
+    const a=document.createElement('a');a.href='rawbt:base64,'+b64;
+    document.body.appendChild(a);a.click();a.remove();
+  }catch(e){}
+}
+let usbPrn=null,usbEP=null;
+async function usbFindEndpoint(dev){
+  for(const cfg of dev.configurations){
+    for(const itf of cfg.interfaces){
+      for(const alt of itf.alternates){
+        const out=(alt.endpoints||[]).find(e=>e.direction==='out');
+        if(out)return{cfg:cfg.configurationValue,itf:itf.interfaceNumber,ep:out.endpointNumber};
+      }
+    }
+  }
+  return null;
+}
+async function usbConnect(silent){
+  if(!navigator.usb){if(!silent)toast('This browser does not support direct USB printing.');return null}
+  try{
+    let dev=usbPrn;
+    if(!dev){
+      const known=await navigator.usb.getDevices();
+      dev=known[0];
+    }
+    if(!dev){
+      if(silent)return null;
+      dev=await navigator.usb.requestDevice({filters:[]});
+    }
+    await dev.open();
+    const info=await usbFindEndpoint(dev);
+    if(!info){if(!silent)toast('Could not find a USB print connection on that device.');return null}
+    if(!dev.configuration||dev.configuration.configurationValue!==info.cfg)await dev.selectConfiguration(info.cfg);
+    try{await dev.claimInterface(info.itf)}catch(e){if(!silent)toast('USB claim failed: '+(e&&e.message?e.message:e));return null}
+    usbPrn=dev;usbEP=info.ep;
+    return dev;
+  }catch(e){if(!silent)toast('USB connect failed: '+(e&&e.message?e.message:e));return null}
+}
+async function usbSend(bytes,silent){
+  const dev=await usbConnect(silent);
+  if(!dev)return false;
+  try{await dev.transferOut(usbEP,new Uint8Array(bytes));return true}
+  catch(e){if(!silent)toast('USB send failed: '+(e&&e.message?e.message:e));return false}
+}
+function usbKickAndCut(){
+  usbSend([0x1D,0x56,0x42,0x00,0x1B,0x70,0x00,0x19,0xFA],false).catch(function(){});
+}
+function paperPx(){return S.cfg.paper==='80'?576:384}
+function drawReceiptCanvas(o){
+  const W=paperPx(),pad=6,lineH=26,bigH=32;
+  const rows=[];
+  rows.push({t:'c',bold:true,big:true,s:S.cfg.shop});
+  rows.push({t:'c',s:o.day+' '+timeStr(o.t)});
+  rows.push({t:'c',s:'Order #'+o.no+(o.note?' - '+o.note:'')});
+  if(o.void)rows.push({t:'c',bold:true,s:'VOID'});
+  rows.push({t:'line'});
+  o.lines.forEach(l=>{
+    rows.push({t:'l',s:l.n});
+    rows.push({t:'lr',l:l.q+' x '+Number(l.p).toFixed(2),r:(l.p*l.q).toFixed(2)});
+  });
+  rows.push({t:'line'});
+  rows.push({t:'lr',l:'Subtotal',r:o.sub.toFixed(2)});
+  if(o.disc>0)rows.push({t:'lr',l:'Discount',r:'-'+o.disc.toFixed(2)});
+  if(o.redeem)rows.push({t:'lr',l:'Reward: '+o.redeem.n+' (-'+o.redeem.pts+'pts)',r:'-'+Number(o.redeem.val).toFixed(2)});
+  if(o.tax>0)rows.push({t:'lr',l:'Tax '+o.taxPct+'%',r:o.tax.toFixed(2)});
+  if(o.rnd)rows.push({t:'lr',l:'Rounding',r:(o.rnd>0?'+':'')+o.rnd.toFixed(2)});
+  rows.push({t:'line'});
+  rows.push({t:'lr',bold:true,l:'Total (RM)',r:o.due.toFixed(2)});
+  rows.push({t:'line'});
+  rows.push({t:'lr',l:mLabel(o.method),r:o.recv.toFixed(2)});
+  if(o.method==='cash')rows.push({t:'lr',l:'Change',r:o.change.toFixed(2)});
+  rows.push({t:'line'});
+  rows.push({t:'c',s:'Thank you! 谢谢惠顾'});
+  const H=rows.reduce((h,r)=>h+(r.t==='line'?14:(r.big?bigH:lineH)),0)+pad*2;
+  const cv=document.createElement('canvas');
+  cv.width=W;cv.height=H;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#000';
+  ctx.textBaseline='top';
+  let y=pad;
+  rows.forEach(r=>{
+    if(r.t==='line'){ctx.fillRect(pad,y+6,W-pad*2,2);y+=14;return}
+    const fs=r.big?22:15;
+    ctx.font=(r.bold?'bold ':'')+fs+'px sans-serif';
+    if(r.t==='c'){
+      const w=ctx.measureText(r.s).width;
+      ctx.fillText(r.s,Math.max(pad,(W-w)/2),y);
+    }else if(r.t==='l'){
+      ctx.fillText(r.s,pad,y);
+    }else if(r.t==='lr'){
+      ctx.fillText(r.l,pad,y);
+      const w=ctx.measureText(r.r).width;
+      ctx.fillText(r.r,W-pad-w,y);
+    }
+    y+=r.big?bigH:lineH;
+  });
+  return cv;
+}
+function canvasToRaster(cv){
+  const W=cv.width,H=cv.height;
+  const img=cv.getContext('2d').getImageData(0,0,W,H).data;
+  const bpr=Math.ceil(W/8),data=[];
+  for(let y=0;y<H;y++){
+    for(let bx=0;bx<bpr;bx++){
+      let byte=0;
+      for(let bit=0;bit<8;bit++){
+        const x=bx*8+bit;
+        let on=0;
+        if(x<W){
+          const idx=(y*W+x)*4;
+          const lum=(img[idx]+img[idx+1]+img[idx+2])/3;
+          on=(img[idx+3]>128&&lum<160)?1:0;
+        }
+        byte=(byte<<1)|on;
+      }
+      data.push(byte);
+    }
+  }
+  return [0x1D,0x76,0x30,0x00,bpr&0xff,(bpr>>8)&0xff,H&0xff,(H>>8)&0xff].concat(data);
+}
+async function usbPrintReceipt(o){
+  let cv;
+  try{cv=drawReceiptCanvas(o)}catch(e){toast('Could not build the receipt image.');return false}
+  const raster=canvasToRaster(cv);
+  const bytes=[0x1B,0x40].concat(raster,[0x0A,0x0A,0x0A,0x1D,0x56,0x42,0x00,0x1B,0x70,0x00,0x19,0xFA]);
+  const dev=await usbConnect(false);
+  if(!dev)return false;
+  const CH=16384;
+  try{
+    for(let i=0;i<bytes.length;i+=CH){
+      await dev.transferOut(usbEP,new Uint8Array(bytes.slice(i,i+CH)));
+    }
+    return true;
+  }catch(e){toast('USB print failed: '+(e&&e.message?e.message:e));return false}
+}
+function saveMove(){
+  const M=S.modal,amt=parseFloat($('#mv-a').value),s=curShift();
+  if(!s){toast('Open the till first.');return}
+  if(!(amt>0)){toast('Enter an amount.');return}
+  s.moves=s.moves||[];
+  s.moves.push({t:new Date().toISOString(),amt:r2(M.kind==='out'?-amt:amt),note:$('#mv-n').value.trim()});
+  saveShift(s.id);closeModal();
+}
+function reportHTML(s){
+  const c=s.close,by=c.by||{},mv=s.moves||[];
+  const R=(a,b,cl)=>'<div class="r '+(cl||'')+'"><span>'+a+'</span><span>'+b+'</span></div>';
+  let h='<div class="receipt" style="--rw:'+(S.cfg.paper==='80'?72:48)+'mm"><h3>'+esc(S.cfg.shop)+'</h3><div class="c b">Till report</div>'+
+    '<div class="c">Opened '+esc(s.day)+' '+timeStr(s.open.t)+'</div><div class="c">Closed '+esc(dayKey(new Date(c.t)))+' '+timeStr(c.t)+'</div><hr>'+
+    R('Orders',c.orders);
+  METHODS.forEach(m=>{if(by[m[0]]!=null)h+=R(esc(m[1]),Number(by[m[0]]).toFixed(2))});
+  h+=R('Total sales',Number(c.sales).toFixed(2),'b')+'<hr>'+R('Opening float',s.open.total.toFixed(2))+R('Cash sales',Number(by.cash||0).toFixed(2));
+  mv.forEach(m=>{h+=R(esc(m.note||(m.amt<0?'Cash out':'Cash in')),(m.amt<0?'-':'+')+Math.abs(m.amt).toFixed(2))});
+  h+=R('Should be',c.expected.toFixed(2))+R('Counted',c.total.toFixed(2),'b')+
+    R(c.diff===0?'Balanced':(c.diff>0?'Over':'Short'),Math.abs(c.diff).toFixed(2),'b');
+  const cc=c.counts||{};
+  const rows=DENOMS.filter(d=>cc[Math.round(d*100)]>0).map(d=>{const k=Math.round(d*100);return R((d>=1?'RM '+d:k+' sen')+' x '+cc[k],(k/100*cc[k]).toFixed(2))}).join('');
+  if(rows)h+='<hr>'+rows;
+  if(c.note)h+='<hr><div>Note: '+esc(c.note)+'</div>';
+  return h+'</div>';
+}
+function reportModal(){
+  return '<div class="sheet" role="dialog" aria-modal="true" aria-label="Till report"><div class="sheet-head"><h2>Till report</h2><button class="x" data-act="close-modal" aria-label="Close">✕</button></div>'+
+    '<div class="paper">'+reportHTML(S.modal.shift)+'</div><div class="btnrow"><button class="btn primary" data-act="print">Print report</button><button class="btn" data-act="close-modal">Close</button></div></div>';
+}
+
+/* ---------- members ---------- */
+function membersView(){
+  const q=normPhone(S.mq)||S.mq.trim().toLowerCase();
+  const list=Object.values(S.members).filter(m=>!q||normPhone(m.phone).includes(normPhone(S.mq))||(m.name||'').toLowerCase().includes(q))
+    .sort((a,b)=>(b.points||0)-(a.points||0));
+  return '<div class="page" data-keep="page"><div class="wrap">'+
+    '<section class="card"><h2>Look up a member</h2><p class="hint" style="margin-top:0">Customers can check their own points here by phone number.</p>'+
+    '<label class="fld">Phone or name<input id="mSearch" autocomplete="off" value="'+esc(S.mq)+'" placeholder="012-3456789"></label>'+
+    '<button class="btn primary" data-act="add-member">Add member manually</button></section>'+
+    '<section class="card"><div class="cardhead"><h2>Members ('+Object.keys(S.members).length+')</h2></div>'+
+    (list.map(m=>'<button class="irow" data-act="edit-member" data-id="'+esc(m.phone)+'"><span class="in">'+esc(m.name||'Member')+'<small>'+esc(m.phone)+' · '+(m.visits||0)+' visit'+(m.visits===1?'':'s')+'</small></span><span></span><span class="ip">'+(m.points||0)+' pts</span></button>').join('')||'<p class="hint">No members found.</p>')+
+    '</section></div></div>';
+}
+function memberModal(){
+  const M=S.modal,m=M.member,isNew=M.isNew;
+  return '<div class="sheet" role="dialog" aria-modal="true" aria-label="Member"><div class="sheet-head"><h2>'+(isNew?'Add member':'Member')+'</h2><button class="x" data-act="close-modal" aria-label="Close">✕</button></div>'+
+    '<label class="fld">Phone number<input id="mf-p" inputmode="numeric" autocomplete="off" value="'+esc(m.phone)+'"'+(isNew?'':' disabled')+'></label>'+
+    '<label class="fld">Name<input id="mf-n" autocomplete="off" value="'+esc(m.name)+'"></label>'+
+    '<label class="fld">Points<input id="mf-pt" inputmode="numeric" autocomplete="off" value="'+(m.points||0)+'"></label>'+
+    (isNew?'':'<div class="kv"><span>Visits</span><span>'+(m.visits||0)+'</span></div><div class="kv"><span>Total spent</span><span>'+rm(m.spent||0)+'</span></div><div class="kv"><span>Member since</span><span>'+esc(m.since||'')+'</span></div>')+
+    '<div class="btnrow" style="margin-top:12px"><button class="btn primary" data-act="save-member">Save</button><button class="btn" data-act="close-modal">Cancel</button></div></div>';
+}
+function saveMemberForm(){
+  const M=S.modal,phone=normPhone($('#mf-p').value),name=$('#mf-n').value.trim(),pts=parseInt($('#mf-pt').value,10);
+  if(!phone||phone.length<7){toast('Enter a valid phone number.');return}
+  if(!M.isNew&&phone!==M.member.phone){toast('Phone number cannot be changed.');return}
+  if(!M.isNew&&S.members[phone]===undefined){toast('Member not found.');return}
+  if(M.isNew&&S.members[phone]){toast('That phone number is already a member.');return}
+  const cur=S.members[phone]||{phone:phone,visits:0,spent:0,since:dayKey()};
+  S.members[phone]={phone:phone,name:name,points:isNaN(pts)?0:pts,visits:cur.visits||0,spent:cur.spent||0,since:cur.since||dayKey()};
+  saveMember(phone);closeModal();
+}
+
+/* ---------- actions ---------- */
+function shiftDay(n){
+  const d=new Date(S.viewDay+'T12:00:00');d.setDate(d.getDate()+n);
+  S.viewDay=dayKey(d);render();
+}
+function confirmPay(){
+  const {t,eff}=payTotal(),p=S.pay;if(!t.count)return;
+  const sh=curShift();
+  if(!sh){toast('Open the till first.');return}
+  const d=dueFor(eff,p.method);
+  const recv=p.method==='cash'?(parseFloat(p.recv)||0):d.due;
+  if(p.method==='cash'&&recv<d.due)return;
+  const day=dayKey();
+  const o={id:uid(),day:day,dev:DEV,shift:sh.id,t:new Date().toISOString(),no:ordersOf(day).length+1,
+    lines:t.lines.map(l=>({n:l.n,e:l.e,p:l.p,q:l.q})),sub:t.sub,disc:t.disc,tax:t.tax,taxPct:S.cfg.taxPct||0,
+    total:t.total,redeem:p.redeem?{n:p.redeem.n,pts:p.redeem.pts,val:p.redeem.val}:null,
+    rnd:d.rnd,due:d.due,method:p.method,recv:r2(recv),change:r2(recv-d.due),note:p.note.trim(),
+    phone:normPhone(p.phone),void:false};
+  const id=day+'_'+DEV;
+  const cur=S.docs[id]||{day:day,dev:DEV,orders:[]};
+  S.docs[id]={day:cur.day,dev:DEV,orders:cur.orders.concat([o])};
+  saveDoc(id);
+  if(o.phone)settleMember(o.phone,eff,p.redeem);
+  S.cart=[];S.disc={t:'pct',v:0};S.cartOpen=false;S.pay=null;
+  openModal({type:'receipt',order:o,list:false});
+}
+function voidOrder(o){
+  const id=o.day+'_'+o.dev,doc=S.docs[id];if(!doc)return;
+  S.docs[id]={day:doc.day,dev:doc.dev,orders:doc.orders.map(x=>x.id===o.id?Object.assign({},x,{void:true}):x)};
+  saveDoc(id);
+}
+function findOrder(id){for(const d of Object.values(S.docs)){const o=d.orders.find(x=>x.id===id);if(o)return o}return null}
+function csvEsc(v){v=String(v==null?'':v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+async function exportCsv(){
+  const all=Object.values(S.docs).flatMap(d=>d.orders).sort((a,b)=>a.t.localeCompare(b.t));
+  const rows=[['Date','Time','Order','Items','Subtotal','Discount','Tax','Rounding','Total','Payment','Note','Status']];
+  all.forEach(o=>rows.push([o.day,timeStr(o.t),o.no,o.lines.map(l=>l.n+' x'+l.q).join('; '),o.sub,o.disc,o.tax,o.rnd,o.due,mLabel(o.method),o.note,o.void?'Void':'Paid']));
+  const csv='\ufeff'+rows.map(r=>r.map(csvEsc).join(',')).join('\n');
+  try{await DL.save({filename:'sales-'+dayKey()+'.csv',data:csv})}
+  catch(e){if(e&&e.code!=='declined')toast('Could not export the file.')}
+}
+function saveItem(){
+  const M=S.modal,n=$('#ef-n').value.trim(),p=parseFloat($('#ef-p').value);
+  if(!n){toast('Enter an item name.');return}
+  if(isNaN(p)||p<0){toast('Enter a valid price.');return}
+  const it={id:M.item.id||('i'+uid()),n:n,e:$('#ef-e').value.trim(),p:r2(p),c:$('#ef-c').value.trim()||'Other',off:$('#ef-off').checked,addons:M.sel.slice()};
+  if(M.isNew)S.cfg.items.push(it);
+  else S.cfg.items=S.cfg.items.map(x=>x.id===it.id?it:x);
+  saveCfg();
+  if(!S.cat)S.cat=it.c;
+  closeModal();
+}
+function act(a,b){
+  const id=b.dataset.id,v=b.dataset.v;
+  switch(a){
+    case 'tab':S.tab=v;render();break;
+    case 'cat':S.cat=v;render();{const g=$('.grid');if(g)g.scrollTop=0}break;
+    case 'add':openModal({type:'addon',id:id,sel:{},ta:'dine'});break;
+    case 'ta':S.modal.ta=v;renderModal();break;
+    case 'inc':{const l=S.cart.find(x=>x.lid===id);if(l)l.q++;render();break}
+    case 'dec':{const l=S.cart.find(x=>x.lid===id);if(l){l.q--;if(l.q<=0)S.cart=S.cart.filter(x=>x!==l)}if(!S.cart.length)S.cartOpen=false;render();break}
+    case 'addon-confirm':{const M=S.modal,chosen=Object.values(M.sel).flat().map(findOpt).filter(Boolean);addLine(M.id,chosen,M.ta);closeModal();break}
+    case 'clear':S.cart=[];S.disc={t:'pct',v:0};S.cartOpen=false;render();break;
+    case 'cart-toggle':S.cartOpen=!S.cartOpen;render();break;
+    case 'charge':if(totals().count){S.pay={method:'cash',recv:'',note:'',phone:'',redeem:null};openModal({type:'pay'})}break;
+    case 'method':S.pay.method=v;renderModal();updateChange();break;
+    case 'redeem':{
+      const m=findMember(S.pay.phone),r=m&&(S.cfg.rewards||[]).find(x=>x.id===v);
+      S.pay.redeem=(S.pay.redeem&&S.pay.redeem.id===v)?null:(r||null);
+      renderModal();updateChange();break;
+    }
+    case 'quick':{const d=dueFor(totals().total,'cash').due;S.pay.recv=v==='exact'?d.toFixed(2):v;const r=$('#recv');if(r)r.value=S.pay.recv;updateChange();break}
+    case 'confirm-pay':confirmPay();break;
+    case 'close-modal':closeModal();break;
+    case 'print':{
+      const M=S.modal;
+      if(M&&M.type==='receipt'&&navigator.usb){usbPrintReceipt(M.order)}
+      else{try{window.print()}catch(e){toast('Printing is not available here.')}}
+      break;
+    }
+    case 'usb-pair':usbConnect(false).then(d=>{if(d)toast('Printer connected. It will stay connected on this tablet.')});break;
+    case 'open-order':{const o=findOrder(id);if(o)openModal({type:'receipt',order:o,list:true});break}
+    case 'void-ask':openModal({type:'void',order:S.modal.order});break;
+    case 'back-receipt':openModal({type:'receipt',order:S.modal.order,list:true});break;
+    case 'void-do':{const o=S.modal.order;voidOrder(o);closeModal();toast('Order #'+o.no+' voided');break}
+    case 'range':S.range.mode=v;if(v==='day')S.viewDay=dayKey();render();break;
+    case 'day-prev':shiftDay(-1);break;
+    case 'day-next':shiftDay(1);break;
+    case 'day-today':S.viewDay=dayKey();render();break;
+    case 'export':exportCsv();break;
+    case 'open-till':openModal({type:'count',mode:'open',counts:{},note:''});break;
+    case 'close-till':openModal({type:'count',mode:'close',counts:{},note:''});break;
+    case 'count-confirm':countConfirm();break;
+    case 'add-move':openModal({type:'move',kind:'out',a:'',n:''});break;
+    case 'mtype':S.modal.a=$('#mv-a').value;S.modal.n=$('#mv-n').value;S.modal.kind=v;renderModal();break;
+    case 'save-move':saveMove();break;
+    case 'open-report':{const s=S.shifts[id];if(s&&s.close)openModal({type:'report',shift:s});break}
+    case 'add-member':openModal({type:'member',isNew:true,member:{phone:normPhone(S.mq),name:'',points:0}});break;
+    case 'edit-member':{const m=S.members[id];if(m)openModal({type:'member',isNew:false,member:clone(m)});break}
+    case 'save-member':saveMemberForm();break;
+    case 'load-real-menu':
+      if(!S.loadArm){S.loadArm=true;render()}
+      else{S.cfg.items=clone(REAL_ITEMS);S.cfg.groups=[clone(ADDON_GROUP)];S.loadArm=false;saveCfg();render();toast('Menu updated with your real items and photos.')}
+      break;
+    case 'load-real-menu-noimg':
+      if(!S.loadArmN){S.loadArmN=true;render()}
+      else{S.cfg.items=clone(REAL_ITEMS).map(i=>{delete i.img;return i});S.cfg.groups=[clone(ADDON_GROUP)];S.loadArmN=false;saveCfg();render();toast('Menu updated — text only, no photos.')}
+      break;
+    case 'add-reward':openModal({type:'reward',isNew:true,reward:{id:null,n:'',pts:''}});break;
+    case 'edit-reward':{const r=S.cfg.rewards.find(x=>x.id===id);if(r)openModal({type:'reward',isNew:false,arm:false,reward:clone(r)});break}
+    case 'save-reward':{
+      const M=S.modal,n=$('#rw-n').value.trim(),pts=parseInt($('#rw-p').value,10),val=parseFloat($('#rw-v').value);
+      if(!n){toast('Enter what the reward is.');return}
+      if(isNaN(pts)||pts<=0){toast('Enter a valid points amount.');return}
+      const r={id:M.reward.id||('r'+uid()),n:n,pts:pts,val:isNaN(val)?0:r2(Math.max(0,val))};
+      if(M.isNew)S.cfg.rewards.push(r);else S.cfg.rewards=S.cfg.rewards.map(x=>x.id===r.id?r:x);
+      S.cfg.rewards.sort((a,b)=>a.pts-b.pts);
+      saveCfg();closeModal();break;
+    }
+    case 'del-reward':
+      if(!S.modal.arm){S.modal.arm=true;renderModal()}
+      else{const did=S.modal.reward.id;S.cfg.rewards=S.cfg.rewards.filter(x=>x.id!==did);saveCfg();closeModal()}
+      break;
+    case 'add-group':openModal({type:'gaddon',isNew:true,group:{id:null,n:'',type:'multi',opts:[]}});break;
+    case 'edit-group':{const g=groupOf(id);if(g)openModal({type:'gaddon',isNew:false,arm:false,group:clone(g)});break}
+    case 'gtype':S.modal.group.type=v;renderModal();break;
+    case 'save-group':{
+      const M=S.modal,n=$('#gg-n').value.trim();
+      if(!n){toast('Enter a category name.');return}
+      const g={id:M.group.id||('g'+uid()),n:n,type:M.group.type,opts:textToOpts($('#gg-o').value)};
+      if(M.isNew)S.cfg.groups.push(g);else S.cfg.groups=S.cfg.groups.map(x=>x.id===g.id?g:x);
+      saveCfg();closeModal();break;
+    }
+    case 'del-group':
+      if(!S.modal.arm){S.modal.arm=true;renderModal()}
+      else{const did=S.modal.group.id;S.cfg.groups=S.cfg.groups.filter(x=>x.id!==did);S.cfg.items=S.cfg.items.map(i=>i.addons&&i.addons.includes(did)?Object.assign({},i,{addons:i.addons.filter(x=>x!==did)}):i);saveCfg();closeModal()}
+      break;
+    case 'gopt':{
+      const M=S.modal,g=b.dataset.g,o=v;
+      if(b.dataset.single){const cur=M.sel[g]||[];M.sel[g]=(cur[0]===o)?[]:[o];renderModal()}
+      break;
+    }
+    case 'add-item':openModal({type:'edit',isNew:true,item:{id:null,n:'',e:'',p:'',c:S.cat||'',off:false},sel:[]});break;
+    case 'edit-item':{const it=item(id);if(it)openModal({type:'edit',isNew:false,arm:false,item:clone(it),sel:(it.addons||[]).slice()});break}
+    case 'save-item':saveItem();break;
+    case 'del-item':
+      if(!S.modal.arm){S.modal.arm=true;renderModal()}
+      else{const did=S.modal.item.id;S.cfg.items=S.cfg.items.filter(x=>x.id!==did);S.cart=S.cart.filter(x=>x.id!==did);saveCfg();closeModal()}
+      break;
+  }
+}
+
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]');
+  if(b){act(b.dataset.act,b);return}
+  if(e.target.id==='modal'&&S.modal&&S.modal.type==='receipt')closeModal();
+});
+document.addEventListener('input',e=>{
+  const id=e.target.id;
+  if(id==='recv'){S.pay.recv=e.target.value;updateChange()}
+  else if(id==='note'){S.pay.note=e.target.value}
+  else if(id==='mphone'){
+    S.pay.phone=e.target.value;
+    const m=findMember(S.pay.phone);
+    if(S.pay.redeem&&(!m||m.points<S.pay.redeem.pts))S.pay.redeem=null;
+    const h=$('#mhint');if(h)h.innerHTML=memberHint(S.pay.phone);
+    const rb=$('#rewardBox');if(rb)rb.innerHTML=rewardPicker();
+    updateChange();
+  }
+  else if(e.target.classList.contains('cin')&&S.modal){
+    S.modal.counts[e.target.dataset.d]=Math.max(0,parseInt(e.target.value,10)||0);
+    updateCount();
+  }
+  else if(e.target.classList.contains('iaopt')){
+    const aid=e.target.dataset.aid;
+    if(e.target.checked){if(!S.modal.sel.includes(aid))S.modal.sel.push(aid)}else{S.modal.sel=S.modal.sel.filter(x=>x!==aid)}
+  }
+  else if(e.target.classList.contains('gopt')){
+    const g=e.target.dataset.g,o=e.target.dataset.v,cur=S.modal.sel[g]||[];
+    S.modal.sel[g]=e.target.checked?cur.concat([o]):cur.filter(x=>x!==o);
+  }
+  else if(id==='mSearch'){S.mq=e.target.value;render();const el=$('#mSearch');if(el){el.focus();const v=el.value;el.value='';el.value=v}}
+});
+document.addEventListener('change',e=>{
+  const id=e.target.id;
+  if(id==='discT'){S.disc.t=e.target.value;render()}
+  else if(id==='discV'){S.disc.v=Math.max(0,parseFloat(e.target.value)||0);render()}
+  else if(id==='viewDay'){if(e.target.value){S.viewDay=e.target.value;render()}}
+  else if(id==='rangeFrom'){if(e.target.value){S.range.from=e.target.value;render()}}
+  else if(id==='rangeTo'){if(e.target.value){S.range.to=e.target.value;render()}}
+  else if(id==='cfgShop'){S.cfg.shop=e.target.value.trim()||'POS';saveCfg();paintHead();syncPrint()}
+  else if(id==='cfgTax'){S.cfg.taxPct=Math.max(0,parseFloat(e.target.value)||0);saveCfg()}
+  else if(id==='cfgPaper'){S.cfg.paper=e.target.value;saveCfg();syncPrint()}
+  else if(id==='cfgRound'){S.cfg.round5=e.target.checked;saveCfg()}
+  else if(id==='cfgPts'){S.cfg.ptsPerRM=Math.max(0,parseFloat(e.target.value)||0);saveCfg()}
+  else if(id==='cfgTake'){S.cfg.takeFee=Math.max(0,parseFloat(e.target.value)||0);saveCfg()}
+});
+
+let toastTimer;
+function toast(msg){
+  const t=$('#toast');t.textContent=msg;t.hidden=false;
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.hidden=true},3200);
+}
+
+/* ---------- shared sync (only when the runtime provides it) ---------- */
+function startDb(db){
+  DB=db;S.sync='live';
+  db.doc('config/menu').onSnapshot(snap=>{
+    if(snap.exists&&cfgDirty===0)S.cfg=normCfg(clone(snap.data()));
+    softRender();
+  },fail);
+  db.collection('sales').orderBy('day','desc').limit(120).onSnapshot(snap=>{
+    const m={};
+    snap.docs.forEach(d=>{m[d.id]=clone(d.data())});
+    dirty.forEach((n,id)=>{if(S.docs[id])m[id]=S.docs[id]});
+    S.docs=m;S.sync='live';softRender();
+  },fail);
+  db.collection('shifts').orderBy('day','desc').limit(60).onSnapshot(snap=>{
+    const m={};
+    snap.docs.forEach(d=>{m[d.id]=clone(d.data())});
+    sdirty.forEach((n,id)=>{if(S.shifts[id])m[id]=S.shifts[id]});
+    S.shifts=m;softRender();
+  },fail);
+  db.collection('members').limit(500).onSnapshot(snap=>{
+    const m={};
+    snap.docs.forEach(d=>{m[d.id]=clone(d.data())});
+    mdirty.forEach((n,id)=>{if(S.members[id])m[id]=S.members[id]});
+    S.members=m;softRender();
+  },fail);
+}
+
+/* ---------- customer-only points view ---------- */
+const CUSTOMER_MODE=location.search.indexOf('view=customer')>=0;
+const CS={phone:'',sub:null,found:null,searched:false};
+function custRender(){
+  const cfg=S.cfg,pts=CS.found?(CS.found.points||0):0;
+  const rewards=(cfg.rewards||[]).slice().sort((a,b)=>a.pts-b.pts);
+  $('#app').innerHTML='<div class="custwrap"><div class="custcard">'+
+    '<h1>'+esc(cfg.shop)+'</h1><p class="hint" style="margin:4px 0 16px">Check your membership points</p>'+
+    '<label class="fld">Phone number<input id="cphone" inputmode="numeric" autocomplete="off" value="'+esc(CS.phone)+'" placeholder="012-3456789"></label>'+
+    '<button class="charge" style="width:100%;margin-top:4px" id="csearch">Check my points</button>'+
+    (CS.searched?(CS.found?
+      '<div class="due" style="margin-top:16px"><span>'+esc(CS.found.name||'Member')+'</span><strong>'+pts+' pts</strong></div>'+
+      '<h3>What you can use your points for</h3>'+(rewards.length?rewards.map(r=>'<div class="kv"><span>'+esc(r.n)+'</span><span>'+(pts>=r.pts?'✓ ready':r.pts+' pts')+'</span></div>').join(''):'<p class="hint">No rewards set up yet — ask at the counter.</p>')
+      :'<p class="hint" style="margin-top:14px">No member found with that number. Ask at the counter to join.</p>')
+    :'')+'</div></div>';
+}
+function custSearch(raw){
+  const p=normPhone(raw);
+  CS.phone=raw;CS.searched=true;CS.found=null;
+  if(CS.sub){CS.sub();CS.sub=null}
+  if(p&&DB)CS.sub=DB.doc('members/'+p).onSnapshot(s=>{CS.found=(s&&s.exists)?clone(s.data()):null;custRender()},()=>{CS.found=null;custRender()});
+  else if(p)CS.found=S.members[p]||null;
+  custRender();
+}
+document.addEventListener('click',e=>{
+  if(e.target.id==='csearch'){const el=$('#cphone');if(el)custSearch(el.value)}
+});
+
+loadLocal();
+if(CUSTOMER_MODE){
+  custRender();
+  (async function(){
+    try{
+      if(!window.claude||!window.claude.use)return;
+      const db=await window.claude.use('db');
+      if(db){DB=db;db.doc('config/menu').onSnapshot(s=>{if(s&&s.exists)S.cfg=normCfg(clone(s.data()));custRender()},()=>{})}
+    }catch(e){}
+  })();
+}else{
+  render();
+  syncPrint();
+  (async function(){
+    try{
+      if(!window.claude||!window.claude.use)return;
+      const res=await Promise.all([window.claude.use('db'),window.claude.use('downloads')]);
+      DL=res[1]||null;
+      if(res[0])startDb(res[0]);else if(DL)softRender();
+    }catch(e){}
+  })();
+}
+})();
+</script>
+</body>
+</html>
