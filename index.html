@@ -571,6 +571,7 @@ function menuView(){
     '<button class="btn" style="width:100%;margin-top:8px" data-act="load-real-menu-noimg">'+(S.loadArmN?'Tap again to replace items (text only, no photos)':'Load real menu — text only, no photos')+'</button>'+
     (S.loadArm||S.loadArmN?'<p class="hint">This replaces all current items and add-ons with your 二佬糖水铺 menu. Tap the same button again to confirm.</p>':'')+
     '</section>'+
+    printersCard()+
     '<section class="card"><div class="cardhead"><h2>Rewards</h2><button class="btn primary" data-act="add-reward">Add reward</button></div>'+
     (S.cfg.rewards.map(r=>'<button class="irow" data-act="edit-reward" data-id="'+esc(r.id)+'"><span class="in">'+esc(r.n)+'</span><span class="so"></span><span class="ip">'+r.pts+' pts</span></button>').join('')||'<p class="hint">No rewards yet.</p>')+
     '<p class="hint">These show on your customers\' points page, so they know what their points can be used for.</p></section>'+
@@ -762,7 +763,7 @@ function renderModal(){
     const o=M.order;
     inner='<div class="sheet" role="dialog" aria-modal="true" aria-label="Receipt"><div class="sheet-head"><h2>Order #'+o.no+'</h2><button class="x" data-act="close-modal" aria-label="Close">✕</button></div>'+
       '<div class="paper">'+receiptHTML(o)+'</div><div class="btnrow"><button class="btn primary" data-act="print">Print receipt</button>'+
-      '<button class="btn" data-act="usb-pair">Connect printer (once)</button>'+
+      (NATIVE?'<button class="btn" data-act="kitchen-print">Print kitchen ticket</button>':'<button class="btn" data-act="usb-pair">Connect printer (once)</button>')+
       (M.list&&!o.void?'<button class="btn danger" data-act="void-ask">Void order</button>':'')+
       '<button class="btn" data-act="close-modal">'+(M.list?'Close':'New order')+'</button></div></div>';
   }else if(M.type==='void'){
@@ -947,7 +948,11 @@ function drawReceiptCanvas(o){
   if(o.method==='cash')rows.push({t:'lr',l:'Change',r:o.change.toFixed(2)});
   rows.push({t:'line'});
   rows.push({t:'c',s:'Thank you! 谢谢惠顾'});
-  const H=rows.reduce((h,r)=>h+(r.t==='line'?14:(r.big?bigH:lineH)),0)+pad*2;
+  return rowsToCanvas(rows);
+}
+function rowsToCanvas(rows){
+  const W=paperPx(),pad=6,lineH=26,bigH=32;
+  const H=rows.reduce((h,r)=>h+(r.t==='line'?14:(r.h||(r.big?bigH:lineH))),0)+pad*2;
   const cv=document.createElement('canvas');
   cv.width=W;cv.height=H;
   const ctx=cv.getContext('2d');
@@ -957,7 +962,7 @@ function drawReceiptCanvas(o){
   let y=pad;
   rows.forEach(r=>{
     if(r.t==='line'){ctx.fillRect(pad,y+6,W-pad*2,2);y+=14;return}
-    const fs=r.big?22:15;
+    const fs=r.fs||(r.big?22:15);
     ctx.font=(r.bold?'bold ':'')+fs+'px sans-serif';
     if(r.t==='c'){
       const w=ctx.measureText(r.s).width;
@@ -969,7 +974,7 @@ function drawReceiptCanvas(o){
       const w=ctx.measureText(r.r).width;
       ctx.fillText(r.r,W-pad-w,y);
     }
-    y+=r.big?bigH:lineH;
+    y+=r.h||(r.big?bigH:lineH);
   });
   return cv;
 }
@@ -1009,6 +1014,79 @@ async function usbPrintReceipt(o){
     }
     return true;
   }catch(e){toast('USB print failed: '+(e&&e.message?e.message:e));return false}
+}
+/* ---------- native app printing (Android app wrapper) ---------- */
+const NATIVE=!!(window.AndroidPrinter&&typeof window.AndroidPrinter.send==='function');
+const PR_DEF={cashierMode:'usb',cashierIp:'',kitchenIp:'192.168.0.23',autoKitchen:true};
+const ESC_CUT=[0x1D,0x56,0x42,0x00],ESC_DRAWER=[0x1B,0x70,0x00,0x19,0xFA];
+function prCfg(){let o={};try{o=JSON.parse(LS.get('pos.printers')||'{}')||{}}catch(e){}return Object.assign({},PR_DEF,o)}
+function prSet(k,v){const p=prCfg();p[k]=v;LS.set('pos.printers',JSON.stringify(p))}
+function b64(bytes){
+  const u=new Uint8Array(bytes);let s='';
+  for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));
+  return btoa(s);
+}
+function wrapText(str,fs,bold,maxW){
+  const ctx=document.createElement('canvas').getContext('2d');
+  ctx.font=(bold?'bold ':'')+fs+'px sans-serif';
+  const out=[];let cur='';
+  for(const ch of String(str)){
+    if(cur&&ctx.measureText(cur+ch).width>maxW){out.push(cur);cur=ch.trim()?ch:''}else cur+=ch;
+  }
+  if(cur)out.push(cur);
+  return out;
+}
+function kitchenRows(o){
+  const W=paperPx()-12,rows=[];
+  rows.push({t:'c',bold:true,fs:26,h:36,s:'KITCHEN'});
+  rows.push({t:'c',bold:true,fs:30,h:40,s:'Order #'+o.no});
+  rows.push({t:'c',s:o.day+' '+timeStr(o.t)});
+  if(o.note)wrapText(o.note,20,true,W).forEach(s=>rows.push({t:'c',bold:true,fs:20,h:28,s:s}));
+  rows.push({t:'line'});
+  o.lines.forEach(l=>{
+    wrapText(l.q+' x '+l.n,24,true,W).forEach(s=>rows.push({t:'l',bold:true,fs:24,h:32,s:s}));
+    rows.push({t:'l',fs:6,h:8,s:' '});
+  });
+  rows.push({t:'line'});
+  return rows;
+}
+function rowsBytes(rows,drawer){
+  const raster=canvasToRaster(rowsToCanvas(rows));
+  return [0x1B,0x40].concat(raster,[0x0A,0x0A,0x0A],ESC_CUT,drawer?ESC_DRAWER:[]);
+}
+function receiptBytes(o){
+  const raster=canvasToRaster(drawReceiptCanvas(o));
+  return [0x1B,0x40].concat(raster,[0x0A,0x0A,0x0A],ESC_CUT,ESC_DRAWER);
+}
+function nativeSend(target,host,bytes){
+  try{return String(window.AndroidPrinter.send(target,host||'',b64(bytes)))}
+  catch(e){return 'Printer error: '+(e&&e.message?e.message:e)}
+}
+function printTo(which,build,okMsg,quiet){
+  const p=prCfg();
+  const lan=which==='kitchen'||p.cashierMode==='lan';
+  const host=String((which==='kitchen'?p.kitchenIp:p.cashierIp)||'').trim();
+  if(lan&&!host){toast('Set the '+which+' printer IP in Menu → Printers first.');return}
+  if(!quiet)toast('Printing…');
+  setTimeout(function(){
+    let bytes;
+    try{bytes=build()}catch(e){toast('Could not build the print job.');return}
+    const r=nativeSend(lan?'lan':'usb',host,bytes);
+    toast(r==='OK'?okMsg:r);
+  },60);
+}
+function printCashier(o){printTo('cashier',function(){return receiptBytes(o)},'Receipt printed')}
+function printKitchen(o,quiet){printTo('kitchen',function(){return rowsBytes(kitchenRows(o),false)},'Kitchen ticket printed',quiet)}
+function testRows(t){return [{t:'c',bold:true,big:true,s:'PRINTER TEST'},{t:'c',s:t},{t:'c',s:new Date().toLocaleString()},{t:'line'},{t:'c',s:S.cfg.shop}]}
+function printersCard(){
+  const p=prCfg();
+  return '<section class="card"><h2>Printers (this device)</h2>'+
+    (NATIVE?'':'<p class="hint">Kitchen and network printing only work inside the 二佬糖水铺 POS app on the tablet.</p>')+
+    '<label class="fld">Cashier printer connection<select id="prMode"><option value="usb"'+(p.cashierMode==='usb'?' selected':'')+'>USB cable</option><option value="lan"'+(p.cashierMode==='lan'?' selected':'')+'>Network (LAN)</option></select></label>'+
+    '<label class="fld">Cashier printer IP (network only)<input id="prCashIp" inputmode="decimal" placeholder="192.168.0.xx" value="'+esc(p.cashierIp)+'"></label>'+
+    '<label class="fld">Kitchen printer IP<input id="prKitIp" inputmode="decimal" placeholder="192.168.0.23" value="'+esc(p.kitchenIp)+'"></label>'+
+    '<label class="chk"><input type="checkbox" id="prAuto"'+(p.autoKitchen?' checked':'')+'>Print a kitchen ticket automatically when an order is paid</label>'+
+    '<div class="btnrow"><button class="btn" data-act="pr-test-cash">Test cashier printer</button><button class="btn" data-act="pr-test-kit">Test kitchen printer</button><button class="btn" data-act="pr-drawer">Open cash drawer</button></div></section>';
 }
 function saveMove(){
   const M=S.modal,amt=parseFloat($('#mv-a').value),s=curShift();
@@ -1098,6 +1176,7 @@ function confirmPay(){
   if(o.phone)settleMember(o.phone,eff,p.redeem);
   S.cart=[];S.disc={t:'pct',v:0};S.cartOpen=false;S.pay=null;
   openModal({type:'receipt',order:o,list:false});
+  if(NATIVE){const pc=prCfg();if(pc.autoKitchen&&String(pc.kitchenIp||'').trim())printKitchen(o,true)}
 }
 function voidOrder(o){
   const id=o.day+'_'+o.dev,doc=S.docs[id];if(!doc)return;
@@ -1149,10 +1228,18 @@ function act(a,b){
     case 'close-modal':closeModal();break;
     case 'print':{
       const M=S.modal;
-      if(M&&M.type==='receipt'&&navigator.usb){usbPrintReceipt(M.order)}
+      if(NATIVE){
+        if(M&&M.type==='receipt')printCashier(M.order);
+        else toast('Printing reports from the app is coming soon.');
+      }
+      else if(M&&M.type==='receipt'&&navigator.usb){usbPrintReceipt(M.order)}
       else{try{window.print()}catch(e){toast('Printing is not available here.')}}
       break;
     }
+    case 'kitchen-print':if(S.modal&&S.modal.order)printKitchen(S.modal.order);break;
+    case 'pr-test-cash':printTo('cashier',function(){return rowsBytes(testRows('Cashier printer'),true)},'Test printed');break;
+    case 'pr-test-kit':printTo('kitchen',function(){return rowsBytes(testRows('Kitchen printer'),false)},'Test printed');break;
+    case 'pr-drawer':printTo('cashier',function(){return [0x1B,0x40].concat(ESC_DRAWER)},'Drawer opened');break;
     case 'usb-pair':usbConnect(false).then(d=>{if(d)toast('Printer connected. It will stay connected on this tablet.')});break;
     case 'open-order':{const o=findOrder(id);if(o)openModal({type:'receipt',order:o,list:true});break}
     case 'void-ask':openModal({type:'void',order:S.modal.order});break;
@@ -1269,6 +1356,10 @@ document.addEventListener('change',e=>{
   else if(id==='cfgRound'){S.cfg.round5=e.target.checked;saveCfg()}
   else if(id==='cfgPts'){S.cfg.ptsPerRM=Math.max(0,parseFloat(e.target.value)||0);saveCfg()}
   else if(id==='cfgTake'){S.cfg.takeFee=Math.max(0,parseFloat(e.target.value)||0);saveCfg()}
+  else if(id==='prMode')prSet('cashierMode',e.target.value);
+  else if(id==='prCashIp')prSet('cashierIp',e.target.value.trim());
+  else if(id==='prKitIp')prSet('kitchenIp',e.target.value.trim());
+  else if(id==='prAuto')prSet('autoKitchen',e.target.checked);
 });
 
 let toastTimer;
