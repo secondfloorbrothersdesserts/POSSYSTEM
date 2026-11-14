@@ -6,6 +6,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.view.WindowManager;
 import android.webkit.WebChromeClient;
+import android.webkit.ValueCallback;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -15,7 +16,21 @@ import android.webkit.WebViewClient;
 public class MainActivity extends Activity {
     static final String URL = "https://secondfloorbrothersdesserts.github.io/POSSYSTEM/";
 
+    private static final int FILE_REQ = 1001;
     private WebView web;
+    private ValueCallback<Uri[]> fileCallback;
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == FILE_REQ) {
+            if (fileCallback != null) {
+                fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+                fileCallback = null;
+            }
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -35,7 +50,23 @@ public class MainActivity extends Activity {
         s.setBuiltInZoomControls(false);
 
         web.addJavascriptInterface(new PrinterBridge(getApplicationContext()), "AndroidPrinter");
-        web.setWebChromeClient(new WebChromeClient());
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
+                                             FileChooserParams params) {
+                if (fileCallback != null) {
+                    fileCallback.onReceiveValue(null);
+                }
+                fileCallback = callback;
+                try {
+                    startActivityForResult(params.createIntent(), FILE_REQ);
+                } catch (Exception e) {
+                    fileCallback = null;
+                    return false;
+                }
+                return true;
+            }
+        });
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {

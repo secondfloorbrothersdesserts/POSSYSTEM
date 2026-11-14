@@ -731,6 +731,26 @@ function gaddonModal(){
     (isNew?'':'<button class="btn danger" data-act="del-group">'+(M.arm?'Tap again to delete':'Delete')+'</button>')+
     '<button class="btn" data-act="close-modal">Cancel</button></div></div>';
 }
+function photoOf(M){return M.img!==undefined?M.img:(M.item&&M.item.img)||''}
+function setPhoto(file){
+  const M=S.modal;if(!file||!M||M.type!=='edit')return;
+  const fr=new FileReader();
+  fr.onerror=function(){toast('Could not read that photo.')};
+  fr.onload=function(){
+    const im=new Image();
+    im.onerror=function(){toast('That file is not a photo.')};
+    im.onload=function(){
+      const N=200,cv=document.createElement('canvas');cv.width=N;cv.height=N;
+      const c=cv.getContext('2d'),s=Math.min(im.width,im.height);
+      c.fillStyle='#fff';c.fillRect(0,0,N,N);
+      c.drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,N,N);
+      M.img=cv.toDataURL('image/jpeg',0.82);
+      const p=$('#ef-prev');if(p){p.src=M.img;p.style.display=''}
+    };
+    im.src=fr.result;
+  };
+  fr.readAsDataURL(file);
+}
 function editModal(){
   const M=S.modal,it=M.item,isNew=M.isNew;
   return '<div class="sheet" role="dialog" aria-modal="true" aria-label="Item">'+
@@ -740,6 +760,10 @@ function editModal(){
     '<label class="fld">Price (RM)<input id="ef-p" inputmode="decimal" value="'+esc(it.p)+'" autocomplete="off"></label>'+
     '<label class="fld">Category<input id="ef-c" list="catlist" value="'+esc(it.c||'')+'" autocomplete="off"></label>'+
     '<datalist id="catlist">'+catList().map(c=>'<option value="'+esc(c)+'">').join('')+'</datalist>'+
+    '<div class="fld">Photo (optional)<div style="display:flex;gap:12px;align-items:center;margin-top:6px">'+
+      '<img id="ef-prev" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:10px;'+(photoOf(M)?'':'display:none')+'" src="'+(photoOf(M)||'')+'">'+
+      '<input type="file" id="ef-file" accept="image/*" style="flex:1;min-width:0">'+
+      '<button type="button" class="btn" data-act="photo-clear">Remove</button></div></div>'+
     '<h3>Add-on categories for this item</h3>'+(S.cfg.groups.length?S.cfg.groups.map(g=>'<label class="chk"><input type="checkbox" class="iaopt" data-aid="'+esc(g.id)+'"'+(M.sel.includes(g.id)?' checked':'')+'> '+esc(g.n)+' ('+(g.type==='single'?'pick one':'pick any')+')</label>').join(''):'<p class="hint">No add-on categories set up yet — add them once from the Menu tab\'s Add-on categories section, then tick them here.</p>')+
     '<label class="chk"><input type="checkbox" id="ef-off"'+(it.off?' checked':'')+'>Sold out</label>'+
     '<div class="btnrow"><button class="btn primary" data-act="save-item">Save</button>'+
@@ -1198,6 +1222,7 @@ function saveItem(){
   if(!n){toast('Enter an item name.');return}
   if(isNaN(p)||p<0){toast('Enter a valid price.');return}
   const it={id:M.item.id||('i'+uid()),n:n,e:$('#ef-e').value.trim(),p:r2(p),c:$('#ef-c').value.trim()||'Other',off:$('#ef-off').checked,addons:M.sel.slice()};
+  const img=photoOf(M);if(img)it.img=img;
   if(M.isNew)S.cfg.items.push(it);
   else S.cfg.items=S.cfg.items.map(x=>x.id===it.id?it:x);
   saveCfg();
@@ -1305,6 +1330,7 @@ function act(a,b){
     case 'add-item':openModal({type:'edit',isNew:true,item:{id:null,n:'',e:'',p:'',c:S.cat||'',off:false},sel:[]});break;
     case 'edit-item':{const it=item(id);if(it)openModal({type:'edit',isNew:false,arm:false,item:clone(it),sel:(it.addons||[]).slice()});break}
     case 'save-item':saveItem();break;
+    case 'photo-clear':{const M=S.modal;if(M){M.img='';const p=$('#ef-prev');if(p){p.removeAttribute('src');p.style.display='none'}const f=$('#ef-file');if(f)f.value=''}break}
     case 'del-item':
       if(!S.modal.arm){S.modal.arm=true;renderModal()}
       else{const did=S.modal.item.id;S.cfg.items=S.cfg.items.filter(x=>x.id!==did);S.cart=S.cart.filter(x=>x.id!==did);saveCfg();closeModal()}
@@ -1356,6 +1382,7 @@ document.addEventListener('change',e=>{
   else if(id==='cfgRound'){S.cfg.round5=e.target.checked;saveCfg()}
   else if(id==='cfgPts'){S.cfg.ptsPerRM=Math.max(0,parseFloat(e.target.value)||0);saveCfg()}
   else if(id==='cfgTake'){S.cfg.takeFee=Math.max(0,parseFloat(e.target.value)||0);saveCfg()}
+  else if(id==='ef-file')setPhoto(e.target.files&&e.target.files[0]);
   else if(id==='prMode')prSet('cashierMode',e.target.value);
   else if(id==='prCashIp')prSet('cashierIp',e.target.value.trim());
   else if(id==='prKitIp')prSet('kitchenIp',e.target.value.trim());
