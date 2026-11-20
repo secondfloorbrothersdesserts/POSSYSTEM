@@ -964,59 +964,102 @@ async function usbSend(bytes,silent){
 function usbKickAndCut(){
   usbSend([0x1D,0x56,0x42,0x00,0x1B,0x70,0x00,0x19,0xFA],false).catch(function(){});
 }
-function paperPx(){return S.cfg.paper==='80'?576:384}
+let PW=0;
+function paperPx(){return PW||(NATIVE?(prCfg().cashierPaper==='58'?384:576):(S.cfg.paper==='80'?576:384))}
+function withPaper(which,fn){
+  const p=prCfg();
+  PW=(which==='kitchen'?p.kitchenPaper:p.cashierPaper)==='58'?384:576;
+  try{return fn()}finally{PW=0}
+}
+const LOGO=new Image();LOGO.src='data:image/png;base64,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';
+function pad2(n,l){return String(n).padStart(l,'0')}
+function fmtTime(iso){
+  const d=new Date(iso);let h=d.getHours();const ap=h>=12?'pm':'am';h=h%12||12;
+  return pad2(d.getDate(),2)+'/'+pad2(d.getMonth()+1,2)+'/'+d.getFullYear()+' '+pad2(h,2)+':'+pad2(d.getMinutes(),2)+ap;
+}
+function billNo(o){const d=new Date(o.t);return String(d.getFullYear()).slice(2)+pad2(d.getMonth()+1,2)+pad2(d.getDate(),2)+pad2(o.no,6)}
 function drawReceiptCanvas(o){
-  const W=paperPx(),pad=6,lineH=26,bigH=32;
-  const rows=[];
-  rows.push({t:'c',bold:true,big:true,s:S.cfg.shop});
-  rows.push({t:'c',s:o.day+' '+timeStr(o.t)});
-  rows.push({t:'c',s:'Order #'+o.no+(o.note?' - '+o.note:'')});
-  if(o.void)rows.push({t:'c',bold:true,s:'VOID'});
+  const p=prCfg(),rows=[];
+  if(p.logoOn&&LOGO.complete&&LOGO.naturalWidth>0){
+    const iw=300,ih=Math.round(iw*LOGO.naturalHeight/LOGO.naturalWidth);
+    rows.push({t:'img',img:LOGO,w:iw,ih:ih,h:ih+14});
+  }else if(!String(p.shopEn||'').trim()){
+    rows.push({t:'c',bold:true,fs:34,h:46,s:S.cfg.shop});
+  }
+  if(String(p.shopEn||'').trim())rows.push({t:'c',bold:true,fs:30,h:40,s:p.shopEn});
+  if(String(p.addr1||'').trim())rows.push({t:'c',fs:22,h:30,s:p.addr1});
+  if(String(p.addr2||'').trim())rows.push({t:'c',fs:22,h:30,s:p.addr2});
+  rows.push({t:'gap',h:12});
+  rows.push({t:'r',bold:true,fs:50,h:60,s:'#'+pad2(o.no,4)});
+  rows.push({t:'lr',fs:22,h:30,l:o.note||'',r:'POS'});
+  if(o.void)rows.push({t:'c',bold:true,fs:34,h:46,s:'*** VOID ***'});
+  rows.push({t:'line'});
+  const qty=o.lines.reduce((n,l)=>n+l.q,0);
+  rows.push({t:'cols',bold:true,fs:20,h:28,a:'Name',b:'Num('+qty+')',c:'Subtotal'});
   rows.push({t:'line'});
   o.lines.forEach(l=>{
-    rows.push({t:'l',s:l.n});
-    rows.push({t:'lr',l:l.q+' x '+Number(l.p).toFixed(2),r:(l.p*l.q).toFixed(2)});
+    const parts=wrapText(l.n,24,true,330);
+    rows.push({t:'cols',bold:true,fs:24,h:34,a:parts[0]||'',b:String(l.q),c:(l.p*l.q).toFixed(2)});
+    parts.slice(1).forEach(s=>rows.push({t:'l',bold:true,fs:24,h:34,s:s}));
   });
   rows.push({t:'line'});
-  rows.push({t:'lr',l:'Subtotal',r:o.sub.toFixed(2)});
-  if(o.disc>0)rows.push({t:'lr',l:'Discount',r:'-'+o.disc.toFixed(2)});
-  if(o.redeem)rows.push({t:'lr',l:'Reward: '+o.redeem.n+' (-'+o.redeem.pts+'pts)',r:'-'+Number(o.redeem.val).toFixed(2)});
-  if(o.tax>0)rows.push({t:'lr',l:'Tax '+o.taxPct+'%',r:o.tax.toFixed(2)});
-  if(o.rnd)rows.push({t:'lr',l:'Rounding',r:(o.rnd>0?'+':'')+o.rnd.toFixed(2)});
+  rows.push({t:'lr',fs:24,h:34,l:'Subtotal',r:o.sub.toFixed(2)});
+  if(o.disc>0)rows.push({t:'lr',fs:24,h:34,l:'Discount',r:'-'+o.disc.toFixed(2)});
+  if(o.redeem)rows.push({t:'lr',fs:24,h:34,l:'Reward: '+o.redeem.n+' (-'+o.redeem.pts+'pts)',r:'-'+Number(o.redeem.val).toFixed(2)});
+  if(o.tax>0)rows.push({t:'lr',fs:24,h:34,l:'Tax '+o.taxPct+'%',r:o.tax.toFixed(2)});
+  if(o.rnd)rows.push({t:'lr',fs:24,h:34,l:'Rounding',r:(o.rnd>0?'+':'')+o.rnd.toFixed(2)});
   rows.push({t:'line'});
-  rows.push({t:'lr',bold:true,l:'Total (RM)',r:o.due.toFixed(2)});
+  rows.push({t:'lr',bold:true,fs:38,h:52,l:'Total Amount',r:o.due.toFixed(2)});
   rows.push({t:'line'});
-  rows.push({t:'lr',l:mLabel(o.method),r:o.recv.toFixed(2)});
-  if(o.method==='cash')rows.push({t:'lr',l:'Change',r:o.change.toFixed(2)});
+  rows.push({t:'lr',bold:true,fs:26,h:36,l:mLabel(o.method),r:o.recv.toFixed(2)});
+  if(o.method==='cash')rows.push({t:'lr',bold:true,fs:26,h:36,l:'Change',r:o.change.toFixed(2)});
   rows.push({t:'line'});
-  rows.push({t:'c',s:'Thank you! 谢谢惠顾'});
+  rows.push({t:'lr',fs:22,h:32,l:'Bill No.',r:billNo(o)});
+  rows.push({t:'lr',fs:22,h:32,l:'Order ID',r:String(o.id||'').toUpperCase().slice(-14)});
+  rows.push({t:'lr',fs:22,h:32,l:'Order Time',r:fmtTime(o.t)});
+  rows.push({t:'gap',h:10});
+  if(String(p.footer||'').trim())wrapText(p.footer,24,true,548).forEach(s=>rows.push({t:'c',bold:true,fs:24,h:34,s:s}));
+  rows.push({t:'gap',h:10});
   return rowsToCanvas(rows);
 }
 function rowsToCanvas(rows){
-  const W=paperPx(),pad=6,lineH=26,bigH=32;
-  const H=rows.reduce((h,r)=>h+(r.t==='line'?14:(r.h||(r.big?bigH:lineH))),0)+pad*2;
+  const W=paperPx(),K=W/576,pad=Math.round(14*K);
+  const hOf=r=>Math.max(1,Math.round((r.t==='line'?18:(r.h||32))*K));
+  const H=rows.reduce((h,r)=>h+hOf(r),0)+pad*2;
   const cv=document.createElement('canvas');
   cv.width=W;cv.height=H;
   const ctx=cv.getContext('2d');
   ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
   ctx.fillStyle='#000';
-  ctx.textBaseline='top';
+  ctx.textBaseline='middle';
   let y=pad;
   rows.forEach(r=>{
-    if(r.t==='line'){ctx.fillRect(pad,y+6,W-pad*2,2);y+=14;return}
-    const fs=r.fs||(r.big?22:15);
-    ctx.font=(r.bold?'bold ':'')+fs+'px sans-serif';
-    if(r.t==='c'){
-      const w=ctx.measureText(r.s).width;
-      ctx.fillText(r.s,Math.max(pad,(W-w)/2),y);
-    }else if(r.t==='l'){
-      ctx.fillText(r.s,pad,y);
-    }else if(r.t==='lr'){
-      ctx.fillText(r.l,pad,y);
-      const w=ctx.measureText(r.r).width;
-      ctx.fillText(r.r,W-pad-w,y);
+    const h=hOf(r);
+    if(r.t==='line'){
+      const dash=Math.max(3,Math.round(8*K)),gapw=Math.max(2,Math.round(5*K)),th=Math.max(1,Math.round(2*K));
+      for(let x=pad;x<W-pad;x+=dash+gapw)ctx.fillRect(x,y+Math.round(h/2),Math.min(dash,W-pad-x),th);
+    }else if(r.t==='img'){
+      const iw=Math.round(r.w*K),ih=Math.round(r.ih*K);
+      ctx.drawImage(r.img,Math.round((W-iw)/2),y+Math.round(4*K),iw,ih);
+    }else if(r.t!=='gap'){
+      const fs=Math.max(8,Math.round((r.fs||22)*K));
+      ctx.font=(r.bold?'bold ':'')+fs+'px sans-serif';
+      const cy=y+Math.round(h/2);
+      if(r.t==='c'||r.t==='l'||r.t==='r'){
+        let f=fs,w=ctx.measureText(r.s).width;
+        while(w>W-pad*2&&f>8){f--;ctx.font=(r.bold?'bold ':'')+f+'px sans-serif';w=ctx.measureText(r.s).width}
+        const x=r.t==='c'?Math.max(pad,(W-w)/2):(r.t==='r'?W-pad-w:pad);
+        ctx.fillText(r.s,x,cy);
+      }else if(r.t==='lr'){
+        ctx.fillText(r.l,pad,cy);
+        ctx.fillText(r.r,W-pad-ctx.measureText(r.r).width,cy);
+      }else if(r.t==='cols'){
+        ctx.fillText(r.a,pad,cy);
+        ctx.fillText(r.b,Math.round(W*0.66)-ctx.measureText(r.b).width/2,cy);
+        ctx.fillText(r.c,W-pad-ctx.measureText(r.c).width,cy);
+      }
     }
-    y+=r.h||(r.big?bigH:lineH);
+    y+=h;
   });
   return cv;
 }
@@ -1033,7 +1076,7 @@ function canvasToRaster(cv){
         if(x<W){
           const idx=(y*W+x)*4;
           const lum=(img[idx]+img[idx+1]+img[idx+2])/3;
-          on=(img[idx+3]>128&&lum<160)?1:0;
+          on=(img[idx+3]>128&&lum<175)?1:0;
         }
         byte=(byte<<1)|on;
       }
@@ -1059,8 +1102,9 @@ async function usbPrintReceipt(o){
 }
 /* ---------- native app printing (Android app wrapper) ---------- */
 const NATIVE=!!(window.AndroidPrinter&&typeof window.AndroidPrinter.send==='function');
-const PR_DEF={cashierMode:'usb',cashierIp:'',kitchenIp:'192.168.0.23',autoKitchen:true,autoDrawer:true};
+const PR_DEF={cashierMode:'usb',cashierIp:'',kitchenIp:'192.168.0.23',autoKitchen:true,autoDrawer:true,cashierPaper:'80',kitchenPaper:'80',logoOn:true,shopEn:"SECOND FLOOR BROTHER'S DESSERTS",addr1:'JALAN SL 1/3, Bandar Sungai Long',addr2:'43000 Kajang, Selangor',footer:'Thank you! 谢谢惠顾'};
 const ESC_CUT=[0x1D,0x56,0x42,0x00],ESC_DRAWER=[0x1B,0x70,0x00,0x19,0xFA];
+const PR_FIELDS={prCashPaper:'cashierPaper',prKitPaper:'kitchenPaper',prShopEn:'shopEn',prAddr1:'addr1',prAddr2:'addr2',prFooter:'footer'};
 function prCfg(){let o={};try{o=JSON.parse(LS.get('pos.printers')||'{}')||{}}catch(e){}return Object.assign({},PR_DEF,o)}
 function prSet(k,v){const p=prCfg();p[k]=v;LS.set('pos.printers',JSON.stringify(p))}
 function b64(bytes){
@@ -1073,23 +1117,28 @@ function wrapText(str,fs,bold,maxW){
   ctx.font=(bold?'bold ':'')+fs+'px sans-serif';
   const out=[];let cur='';
   for(const ch of String(str)){
-    if(cur&&ctx.measureText(cur+ch).width>maxW){out.push(cur);cur=ch.trim()?ch:''}else cur+=ch;
+    if(cur&&ctx.measureText(cur+ch).width>maxW){
+      const sp=cur.lastIndexOf(' ');
+      if(sp>0&&/[A-Za-z0-9(+.,]/.test(ch)){out.push(cur.slice(0,sp));cur=cur.slice(sp+1)+ch}
+      else{out.push(cur);cur=ch.trim()?ch:''}
+    }else cur+=ch;
   }
   if(cur)out.push(cur);
   return out;
 }
 function kitchenRows(o){
-  const W=paperPx()-12,rows=[];
-  rows.push({t:'c',bold:true,fs:26,h:36,s:'KITCHEN'});
-  rows.push({t:'c',bold:true,fs:30,h:40,s:'Order #'+o.no});
-  rows.push({t:'c',s:o.day+' '+timeStr(o.t)});
-  if(o.note)wrapText(o.note,20,true,W).forEach(s=>rows.push({t:'c',bold:true,fs:20,h:28,s:s}));
+  const rows=[];
+  rows.push({t:'c',bold:true,fs:34,h:46,s:'KITCHEN'});
+  rows.push({t:'c',bold:true,fs:64,h:78,s:'#'+pad2(o.no,4)});
+  rows.push({t:'c',fs:24,h:34,s:fmtTime(o.t)});
+  if(o.note)wrapText(o.note,28,true,548).forEach(s=>rows.push({t:'c',bold:true,fs:28,h:38,s:s}));
   rows.push({t:'line'});
   o.lines.forEach(l=>{
-    wrapText(l.q+' x '+l.n,24,true,W).forEach(s=>rows.push({t:'l',bold:true,fs:24,h:32,s:s}));
-    rows.push({t:'l',fs:6,h:8,s:' '});
+    wrapText(l.q+' x '+l.n,32,true,548).forEach(s=>rows.push({t:'l',bold:true,fs:32,h:44,s:s}));
+    rows.push({t:'gap',h:8});
   });
   rows.push({t:'line'});
+  rows.push({t:'gap',h:10});
   return rows;
 }
 function rowsBytes(rows,drawer){
@@ -1119,8 +1168,8 @@ function printTo(which,build,okMsg,quiet){
 }
 function kickDrawer(){if(NATIVE&&prCfg().autoDrawer)printTo('cashier',function(){return [0x1B,0x40].concat(ESC_DRAWER)},'',true)}
 function printCashier(o){printTo('cashier',function(){return receiptBytes(o)},'Receipt printed')}
-function printKitchen(o,quiet){printTo('kitchen',function(){return rowsBytes(kitchenRows(o),false)},'Kitchen ticket printed',quiet)}
-function testRows(t){return [{t:'c',bold:true,big:true,s:'PRINTER TEST'},{t:'c',s:t},{t:'c',s:new Date().toLocaleString()},{t:'line'},{t:'c',s:S.cfg.shop}]}
+function printKitchen(o,quiet){printTo('kitchen',function(){return withPaper('kitchen',function(){return rowsBytes(kitchenRows(o),false)})},'Kitchen ticket printed',quiet)}
+function testRows(t){return [{t:'c',bold:true,fs:40,h:56,s:'PRINTER TEST'},{t:'c',fs:26,h:36,s:t},{t:'c',fs:22,h:30,s:new Date().toLocaleString()},{t:'line'},{t:'c',bold:true,fs:30,h:40,s:S.cfg.shop},{t:'gap',h:10}]}
 function printersCard(){
   const p=prCfg();
   return '<section class="card"><h2>Printers (this device)</h2>'+
@@ -1128,6 +1177,13 @@ function printersCard(){
     '<label class="fld">Cashier printer connection<select id="prMode"><option value="usb"'+(p.cashierMode==='usb'?' selected':'')+'>USB cable</option><option value="lan"'+(p.cashierMode==='lan'?' selected':'')+'>Network (LAN)</option></select></label>'+
     '<label class="fld">Cashier printer IP (network only)<input id="prCashIp" inputmode="decimal" placeholder="192.168.0.xx" value="'+esc(p.cashierIp)+'"></label>'+
     '<label class="fld">Kitchen printer IP<input id="prKitIp" inputmode="decimal" placeholder="192.168.0.23" value="'+esc(p.kitchenIp)+'"></label>'+
+    '<label class="fld">Cashier paper width<select id="prCashPaper"><option value="80"'+(p.cashierPaper==='80'?' selected':'')+'>80 mm</option><option value="58"'+(p.cashierPaper==='58'?' selected':'')+'>58 mm</option></select></label>'+
+    '<label class="fld">Kitchen paper width<select id="prKitPaper"><option value="80"'+(p.kitchenPaper==='80'?' selected':'')+'>80 mm</option><option value="58"'+(p.kitchenPaper==='58'?' selected':'')+'>58 mm</option></select></label>'+
+    '<label class="chk"><input type="checkbox" id="prLogo"'+(p.logoOn?' checked':'')+'>Print the logo at the top of receipts</label>'+
+    '<label class="fld">Receipt shop name<input id="prShopEn" value="'+esc(p.shopEn)+'"></label>'+
+    '<label class="fld">Receipt address line 1<input id="prAddr1" value="'+esc(p.addr1)+'"></label>'+
+    '<label class="fld">Receipt address line 2<input id="prAddr2" value="'+esc(p.addr2)+'"></label>'+
+    '<label class="fld">Receipt footer message<input id="prFooter" value="'+esc(p.footer)+'"></label>'+
     '<label class="chk"><input type="checkbox" id="prDrawer"'+(p.autoDrawer?' checked':'')+'>Open the cash drawer for cash payments and when counting the till</label>'+
     '<label class="chk"><input type="checkbox" id="prAuto"'+(p.autoKitchen?' checked':'')+'>Print a kitchen ticket automatically when an order is paid</label>'+
     '<p class="hint">Browser engine: '+esc((navigator.userAgent.match(/Chrome\/[0-9.]+/)||['unknown'])[0])+(NATIVE?' (app)':'')+'</p>'+
@@ -1285,7 +1341,7 @@ function act(a,b){
     }
     case 'kitchen-print':if(S.modal&&S.modal.order)printKitchen(S.modal.order);break;
     case 'pr-test-cash':printTo('cashier',function(){return rowsBytes(testRows('Cashier printer'),true)},'Test printed');break;
-    case 'pr-test-kit':printTo('kitchen',function(){return rowsBytes(testRows('Kitchen printer'),false)},'Test printed');break;
+    case 'pr-test-kit':printTo('kitchen',function(){return withPaper('kitchen',function(){return rowsBytes(testRows('Kitchen printer'),false)})},'Test printed');break;
     case 'pr-drawer':printTo('cashier',function(){return [0x1B,0x40].concat(ESC_DRAWER)},'Drawer opened');break;
     case 'usb-pair':usbConnect(false).then(d=>{if(d)toast('Printer connected. It will stay connected on this tablet.')});break;
     case 'open-order':{const o=findOrder(id);if(o)openModal({type:'receipt',order:o,list:true});break}
@@ -1410,6 +1466,8 @@ document.addEventListener('change',e=>{
   else if(id==='prKitIp')prSet('kitchenIp',e.target.value.trim());
   else if(id==='prAuto')prSet('autoKitchen',e.target.checked);
   else if(id==='prDrawer')prSet('autoDrawer',e.target.checked);
+  else if(id==='prLogo')prSet('logoOn',e.target.checked);
+  else if(PR_FIELDS[id])prSet(PR_FIELDS[id],e.target.value);
 });
 
 let toastTimer;
