@@ -44,7 +44,7 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
-        s.setCacheMode(WebSettings.LOAD_DEFAULT);
+        s.setCacheMode(WebSettings.LOAD_NO_CACHE);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setAllowFileAccess(false);
         s.setBuiltInZoomControls(false);
@@ -97,7 +97,8 @@ public class MainActivity extends Activity {
         if (savedInstanceState != null) {
             web.restoreState(savedInstanceState);
         } else {
-            web.loadUrl(URL);
+            web.clearCache(true);
+            web.loadUrl(URL + "?t=" + System.currentTimeMillis());
         }
     }
 
