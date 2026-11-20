@@ -82,7 +82,7 @@ main{flex:1;min-height:0;position:relative}
 
 .cart{position:absolute;left:0;right:0;bottom:0;max-height:88%;display:flex;flex-direction:column;background:var(--surface);border-radius:20px 20px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.25);transform:translateY(105%);transition:transform .22s ease;z-index:20}
 .sell.open .cart{transform:none}
-.scrim{display:none;position:absolute;inset:0;background:rgba(0,0,0,.4);z-index:15}
+.scrim{display:none;position:absolute;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.4);z-index:15}
 .sell.open .scrim{display:block}
 .cart-head{flex:none;display:flex;align-items:center;justify-content:space-between;padding:14px 16px 6px}
 .cart-head h2{font:700 18px/1.2 var(--serif)}
@@ -156,7 +156,7 @@ main{flex:1;min-height:0;position:relative}
 .btnrow .btn{flex:1;min-width:110px}
 
 /* modal */
-.modal{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center}
+.modal{position:fixed;top:0;right:0;bottom:0;left:0;z-index:50;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center}
 .modal[hidden]{display:none}
 .sheet{width:100%;max-width:470px;max-height:94%;overflow-y:auto;background:var(--surface);border-radius:20px 20px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px))}
 @media (min-width:600px){.modal{align-items:center}.sheet{border-radius:20px}}
@@ -1041,7 +1041,7 @@ async function usbPrintReceipt(o){
 }
 /* ---------- native app printing (Android app wrapper) ---------- */
 const NATIVE=!!(window.AndroidPrinter&&typeof window.AndroidPrinter.send==='function');
-const PR_DEF={cashierMode:'usb',cashierIp:'',kitchenIp:'192.168.0.23',autoKitchen:true};
+const PR_DEF={cashierMode:'usb',cashierIp:'',kitchenIp:'192.168.0.23',autoKitchen:true,autoDrawer:true};
 const ESC_CUT=[0x1D,0x56,0x42,0x00],ESC_DRAWER=[0x1B,0x70,0x00,0x19,0xFA];
 function prCfg(){let o={};try{o=JSON.parse(LS.get('pos.printers')||'{}')||{}}catch(e){}return Object.assign({},PR_DEF,o)}
 function prSet(k,v){const p=prCfg();p[k]=v;LS.set('pos.printers',JSON.stringify(p))}
@@ -1096,9 +1096,10 @@ function printTo(which,build,okMsg,quiet){
     let bytes;
     try{bytes=build()}catch(e){toast('Could not build the print job.');return}
     const r=nativeSend(lan?'lan':'usb',host,bytes);
-    toast(r==='OK'?okMsg:r);
+    if(r!=='OK'||!quiet)toast(r==='OK'?okMsg:r);
   },60);
 }
+function kickDrawer(){if(NATIVE&&prCfg().autoDrawer)printTo('cashier',function(){return [0x1B,0x40].concat(ESC_DRAWER)},'',true)}
 function printCashier(o){printTo('cashier',function(){return receiptBytes(o)},'Receipt printed')}
 function printKitchen(o,quiet){printTo('kitchen',function(){return rowsBytes(kitchenRows(o),false)},'Kitchen ticket printed',quiet)}
 function testRows(t){return [{t:'c',bold:true,big:true,s:'PRINTER TEST'},{t:'c',s:t},{t:'c',s:new Date().toLocaleString()},{t:'line'},{t:'c',s:S.cfg.shop}]}
@@ -1109,7 +1110,9 @@ function printersCard(){
     '<label class="fld">Cashier printer connection<select id="prMode"><option value="usb"'+(p.cashierMode==='usb'?' selected':'')+'>USB cable</option><option value="lan"'+(p.cashierMode==='lan'?' selected':'')+'>Network (LAN)</option></select></label>'+
     '<label class="fld">Cashier printer IP (network only)<input id="prCashIp" inputmode="decimal" placeholder="192.168.0.xx" value="'+esc(p.cashierIp)+'"></label>'+
     '<label class="fld">Kitchen printer IP<input id="prKitIp" inputmode="decimal" placeholder="192.168.0.23" value="'+esc(p.kitchenIp)+'"></label>'+
+    '<label class="chk"><input type="checkbox" id="prDrawer"'+(p.autoDrawer?' checked':'')+'>Open the cash drawer for cash payments and when counting the till</label>'+
     '<label class="chk"><input type="checkbox" id="prAuto"'+(p.autoKitchen?' checked':'')+'>Print a kitchen ticket automatically when an order is paid</label>'+
+    '<p class="hint">Browser engine: '+esc((navigator.userAgent.match(/Chrome\/[0-9.]+/)||['unknown'])[0])+(NATIVE?' (app)':'')+'</p>'+
     '<div class="btnrow"><button class="btn" data-act="pr-test-cash">Test cashier printer</button><button class="btn" data-act="pr-test-kit">Test kitchen printer</button><button class="btn" data-act="pr-drawer">Open cash drawer</button></div></section>';
 }
 function saveMove(){
@@ -1200,6 +1203,7 @@ function confirmPay(){
   if(o.phone)settleMember(o.phone,eff,p.redeem);
   S.cart=[];S.disc={t:'pct',v:0};S.cartOpen=false;S.pay=null;
   openModal({type:'receipt',order:o,list:false});
+  if(o.method==='cash')kickDrawer();
   if(NATIVE){const pc=prCfg();if(pc.autoKitchen&&String(pc.kitchenIp||'').trim())printKitchen(o,true)}
 }
 function voidOrder(o){
@@ -1275,8 +1279,8 @@ function act(a,b){
     case 'day-next':shiftDay(1);break;
     case 'day-today':S.viewDay=dayKey();render();break;
     case 'export':exportCsv();break;
-    case 'open-till':openModal({type:'count',mode:'open',counts:{},note:''});break;
-    case 'close-till':openModal({type:'count',mode:'close',counts:{},note:''});break;
+    case 'open-till':openModal({type:'count',mode:'open',counts:{},note:''});kickDrawer();break;
+    case 'close-till':openModal({type:'count',mode:'close',counts:{},note:''});kickDrawer();break;
     case 'count-confirm':countConfirm();break;
     case 'add-move':openModal({type:'move',kind:'out',a:'',n:''});break;
     case 'mtype':S.modal.a=$('#mv-a').value;S.modal.n=$('#mv-n').value;S.modal.kind=v;renderModal();break;
@@ -1387,6 +1391,7 @@ document.addEventListener('change',e=>{
   else if(id==='prCashIp')prSet('cashierIp',e.target.value.trim());
   else if(id==='prKitIp')prSet('kitchenIp',e.target.value.trim());
   else if(id==='prAuto')prSet('autoKitchen',e.target.checked);
+  else if(id==='prDrawer')prSet('autoDrawer',e.target.checked);
 });
 
 let toastTimer;
