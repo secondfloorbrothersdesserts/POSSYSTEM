@@ -27,16 +27,20 @@ jobs:
 
       - name: Build APK
         working-directory: android
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon assembleLiveDebug assembleTestDebug
 
       - name: Name the APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk ErLaoPOS.apk
+        run: |
+          cp android/app/build/outputs/apk/live/debug/app-live-debug.apk ErLaoPOS.apk
+          cp android/app/build/outputs/apk/test/debug/app-test-debug.apk ErLaoPOS-TEST.apk
 
       - name: Publish as the latest release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: app-latest
           name: 二佬糖水铺 POS app (latest)
-          body: Download ErLaoPOS.apk and install it on the tablet.
-          files: ErLaoPOS.apk
+          body: ErLaoPOS.apk is the shop app. ErLaoPOS-TEST.apk is the separate test app.
+          files: |
+            ErLaoPOS.apk
+            ErLaoPOS-TEST.apk
           make_latest: true

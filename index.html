@@ -16,6 +16,13 @@
       b.textContent+=msg+'\n';
     }catch(x){}
   }
+  if(/\/test\/?$/.test(location.pathname)||/\/test\/index\.html$/.test(location.pathname)){
+    document.addEventListener('DOMContentLoaded',function(){
+      var d=document.createElement('div');d.textContent='TEST VERSION';
+      d.style.cssText='position:fixed;top:0;left:0;z-index:99998;background:#b00020;color:#fff;font:700 11px sans-serif;padding:2px 8px;border-radius:0 0 8px 0;pointer-events:none';
+      document.body.appendChild(d);
+    });
+  }
   window.addEventListener('error',function(e){show('Error: '+(e.message||'unknown')+' (line '+(e.lineno||'?')+')')});
   window.addEventListener('unhandledrejection',function(e){show('Error: '+(e.reason&&e.reason.message?e.reason.message:e.reason))});
 })();

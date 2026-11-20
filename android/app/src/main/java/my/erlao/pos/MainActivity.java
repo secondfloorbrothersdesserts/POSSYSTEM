@@ -14,7 +14,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 public class MainActivity extends Activity {
-    static final String URL = "https://secondfloorbrothersdesserts.github.io/POSSYSTEM/";
+    static final String URL = BuildConfig.START_URL;
 
     private static final int FILE_REQ = 1001;
     private WebView web;
