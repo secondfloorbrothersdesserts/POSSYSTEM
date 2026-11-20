@@ -17,7 +17,7 @@ android {
             resValue 'string', 'app_name', '二佬糖水铺 POS'
             buildConfigField 'String', 'START_URL', '"https://secondfloorbrothersdesserts.github.io/POSSYSTEM/"'
         }
-        test {
+        staging {
             dimension 'env'
             applicationIdSuffix '.test'
             versionNameSuffix '-test'

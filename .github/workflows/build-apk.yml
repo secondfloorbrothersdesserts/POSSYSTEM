@@ -27,12 +27,12 @@ jobs:
 
       - name: Build APK
         working-directory: android
-        run: gradle --no-daemon assembleLiveDebug assembleTestDebug
+        run: gradle --no-daemon assembleLiveDebug assembleStagingDebug
 
       - name: Name the APK
         run: |
           cp android/app/build/outputs/apk/live/debug/app-live-debug.apk ErLaoPOS.apk
-          cp android/app/build/outputs/apk/test/debug/app-test-debug.apk ErLaoPOS-TEST.apk
+          cp android/app/build/outputs/apk/staging/debug/app-staging-debug.apk ErLaoPOS-TEST.apk
 
       - name: Publish as the latest release
         uses: softprops/action-gh-release@v2
