@@ -79,7 +79,7 @@ public class PrinterBridge {
 
     @JavascriptInterface
     public String version() {
-        return "1.0";
+        return "1.6";
     }
 
 
@@ -173,7 +173,21 @@ public class PrinterBridge {
 
     /* ---------------- network ---------------- */
 
+    /** Network printers sometimes refuse a connection while still busy: try up to 4 times. */
     private String sendLan(String hostArg, byte[] data) {
+        String r = "";
+        for (int attempt = 0; attempt < 4; attempt++) {
+            r = sendLanOnce(hostArg, data);
+            if ("OK".equals(r) || r.startsWith("No printer IP")) return r;
+            try {
+                Thread.sleep(600L * (attempt + 1));
+            } catch (InterruptedException ignored) {
+            }
+        }
+        return r + " (tried 4 times)";
+    }
+
+    private String sendLanOnce(String hostArg, byte[] data) {
         String host = hostArg == null ? "" : hostArg.trim();
         int port = 9100;
         int colon = host.lastIndexOf(':');
@@ -189,7 +203,7 @@ public class PrinterBridge {
         }
         Socket s = new Socket();
         try {
-            s.connect(new InetSocketAddress(host, port), 4000);
+            s.connect(new InetSocketAddress(host, port), 3000);
             s.setSoTimeout(5000);
             s.setTcpNoDelay(true);
             OutputStream out = s.getOutputStream();
@@ -203,9 +217,9 @@ public class PrinterBridge {
                     }
                 }
             }
-            // give the printer a moment to drain its buffer before closing
+            // let the printer take the whole job before we hang up (longer for big jobs)
             try {
-                Thread.sleep(300);
+                Thread.sleep(400 + Math.min(1500, data.length / 40));
             } catch (InterruptedException ignored) {
             }
             return "OK";
