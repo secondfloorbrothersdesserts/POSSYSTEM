@@ -15,7 +15,12 @@ import android.os.Build;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
+import java.nio.charset.Charset;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
@@ -42,20 +47,128 @@ public class PrinterBridge {
     public String send(String target, String host, String b64) {
         synchronized (lock) {
             try {
-                byte[] data = Base64.decode(b64, Base64.DEFAULT);
-                if ("lan".equals(target)) {
-                    return sendLan(host, data);
-                }
-                return sendUsb(data);
+                return dispatch(target, host, Base64.decode(b64, Base64.DEFAULT));
             } catch (Throwable t) {
                 return "Printer error: " + t.getMessage();
             }
         }
     }
 
+    /** Plain-text ticket (printer's own fonts, Chinese as GBK). json = {cols, ops:[...]} */
+    @JavascriptInterface
+    public String sendOps(String target, String host, String json) {
+        synchronized (lock) {
+            try {
+                return dispatch(target, host, buildTicket(json));
+            } catch (Throwable t) {
+                return "Printer error: " + t.getMessage();
+            }
+        }
+    }
+
+    private String dispatch(String target, String host, byte[] data) {
+        if ("lan".equals(target)) {
+            return sendLan(host, data);
+        }
+        try {
+            return sendUsb(data);
+        } catch (InterruptedException e) {
+            return "Printer error: interrupted";
+        }
+    }
+
     @JavascriptInterface
     public String version() {
         return "1.0";
+    }
+
+
+    /* ---------------- text tickets ---------------- */
+
+    private static final Charset GBK = Charset.forName("GBK");
+
+    private static int dispWidth(String s) {
+        int w = 0;
+        for (int i = 0; i < s.length(); i++) {
+            w += s.charAt(i) > 0x7F ? 2 : 1;
+        }
+        return w;
+    }
+
+    private static String repeat(char c, int n) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < n; i++) sb.append(c);
+        return sb.toString();
+    }
+
+    /** Split text into pieces no wider than max display columns. */
+    private static java.util.List<String> wrap(String s, int max) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        int w = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            int cw = c > 0x7F ? 2 : 1;
+            if (w + cw > max && cur.length() > 0) {
+                out.add(cur.toString());
+                cur.setLength(0);
+                w = 0;
+                if (c == ' ') continue;
+            }
+            cur.append(c);
+            w += cw;
+        }
+        if (cur.length() > 0) out.add(cur.toString());
+        if (out.isEmpty()) out.add("");
+        return out;
+    }
+
+    private static void line(ByteArrayOutputStream o, String text, int align, boolean dh, boolean dw, boolean bold) throws Exception {
+        o.write(new byte[]{0x1B, 0x61, (byte) align});
+        o.write(new byte[]{0x1D, 0x21, (byte) ((dw ? 0x10 : 0) | (dh ? 0x01 : 0))});
+        o.write(new byte[]{0x1B, 0x45, (byte) (bold ? 1 : 0)});
+        o.write(text.getBytes(GBK));
+        o.write(0x0A);
+    }
+
+    private byte[] buildTicket(String json) throws Exception {
+        JSONObject root = new JSONObject(json);
+        int cols = root.optInt("cols", 48);
+        JSONArray ops = root.getJSONArray("ops");
+        ByteArrayOutputStream o = new ByteArrayOutputStream();
+        o.write(new byte[]{0x1B, 0x40});          // init
+        o.write(new byte[]{0x1C, 0x26});          // Chinese (GBK) character mode
+        o.write(new byte[]{0x1B, 0x4D, 0x01});    // condensed font B
+        for (int i = 0; i < ops.length(); i++) {
+            JSONObject op = ops.getJSONObject(i);
+            String t = op.optString("t");
+            boolean dh = op.optInt("h", 0) == 1, dw = op.optInt("w", 0) == 1, b = op.optInt("b", 0) == 1;
+            int usable = dw ? cols / 2 : cols;
+            if ("text".equals(t)) {
+                String a = op.optString("a", "l");
+                int align = "c".equals(a) ? 1 : ("r".equals(a) ? 2 : 0);
+                for (String piece : wrap(op.optString("s"), usable)) {
+                    line(o, piece, align, dh, dw, b);
+                }
+            } else if ("lr".equals(t)) {
+                String l = op.optString("l"), r = op.optString("r");
+                int rw = dispWidth(r);
+                java.util.List<String> parts = wrap(l, Math.max(4, usable - rw - 1));
+                String first = parts.get(0);
+                int pad = Math.max(1, usable - dispWidth(first) - rw);
+                line(o, first + repeat(' ', pad) + r, 0, dh, dw, b);
+                for (int k = 1; k < parts.size(); k++) {
+                    line(o, parts.get(k), 0, dh, dw, b);
+                }
+            } else if ("line".equals(t)) {
+                line(o, repeat('-', cols), 0, false, false, false);
+            } else if ("feed".equals(t)) {
+                for (int k = 0; k < op.optInt("n", 1); k++) o.write(0x0A);
+            }
+        }
+        o.write(new byte[]{0x1B, 0x61, 0x00, 0x1D, 0x21, 0x00, 0x1B, 0x45, 0x00});
+        o.write(new byte[]{0x1D, 0x56, 0x42, 0x00}); // feed + cut
+        return o.toByteArray();
     }
 
     /* ---------------- network ---------------- */
@@ -80,8 +193,16 @@ public class PrinterBridge {
             s.setSoTimeout(5000);
             s.setTcpNoDelay(true);
             OutputStream out = s.getOutputStream();
-            out.write(data);
-            out.flush();
+            for (int off = 0; off < data.length; off += 2048) {
+                out.write(data, off, Math.min(2048, data.length - off));
+                out.flush();
+                if (data.length > 4096) {
+                    try {
+                        Thread.sleep(15);
+                    } catch (InterruptedException ignored) {
+                    }
+                }
+            }
             // give the printer a moment to drain its buffer before closing
             try {
                 Thread.sleep(300);

@@ -23,6 +23,7 @@
       document.body.appendChild(d);
     });
   }
+  window.__showErr=show;
   window.addEventListener('error',function(e){show('Error: '+(e.message||'unknown')+' (line '+(e.lineno||'?')+')')});
   window.addEventListener('unhandledrejection',function(e){show('Error: '+(e.reason&&e.reason.message?e.reason.message:e.reason))});
 })();
@@ -450,7 +451,7 @@ function totals(){
     const it=item(l.id);if(!it)return null;
     const addP=(l.add||[]).reduce((a,x)=>a+x.p,0)+(l.ta==='take'?(S.cfg.takeFee||0):0);
     const nm=it.n+((l.add&&l.add.length)?' + '+l.add.map(x=>x.n).join(', '):'')+(l.ta==='take'?' (Takeaway +'+Number(S.cfg.takeFee||0).toFixed(2)+')':'');
-    return {lid:l.lid,id:it.id,n:nm,e:it.e||'',p:r2(it.p+addP),q:l.q};
+    return {lid:l.lid,id:it.id,n:nm,e:it.e||'',p:r2(it.p+addP),q:l.q,ta:l.ta==='take',bn:it.n,add:(l.add||[]).map(x=>x.n)};
   }).filter(Boolean);
   const sub=r2(lines.reduce((a,l)=>a+l.p*l.q,0));
   let disc=0;
@@ -1109,9 +1110,9 @@ async function usbPrintReceipt(o){
 }
 /* ---------- native app printing (Android app wrapper) ---------- */
 const NATIVE=!!(window.AndroidPrinter&&typeof window.AndroidPrinter.send==='function');
-const PR_DEF={cashierMode:'usb',cashierIp:'',kitchenIp:'192.168.0.23',autoKitchen:true,autoDrawer:true,cashierPaper:'80',kitchenPaper:'80',logoOn:true,shopEn:"SECOND FLOOR BROTHER'S DESSERTS",addr1:'JALAN SL 1/3, Bandar Sungai Long',addr2:'43000 Kajang, Selangor',footer:'Thank you! 谢谢惠顾'};
+const PR_DEF={cashierMode:'usb',cashierIp:'',kitchenIp:'192.168.0.23',autoKitchen:true,autoDrawer:true,kitchenStyle:'text',cashierPaper:'80',kitchenPaper:'80',logoOn:true,shopEn:"SECOND FLOOR BROTHER'S DESSERTS",addr1:'JALAN SL 1/3, Bandar Sungai Long',addr2:'43000 Kajang, Selangor',footer:'Thank you! 谢谢惠顾'};
 const ESC_CUT=[0x1D,0x56,0x42,0x00],ESC_DRAWER=[0x1B,0x70,0x00,0x19,0xFA];
-const PR_FIELDS={prCashPaper:'cashierPaper',prKitPaper:'kitchenPaper',prShopEn:'shopEn',prAddr1:'addr1',prAddr2:'addr2',prFooter:'footer'};
+const PR_FIELDS={prKitStyle:'kitchenStyle',prCashPaper:'cashierPaper',prKitPaper:'kitchenPaper',prShopEn:'shopEn',prAddr1:'addr1',prAddr2:'addr2',prFooter:'footer'};
 function prCfg(){let o={};try{o=JSON.parse(LS.get('pos.printers')||'{}')||{}}catch(e){}return Object.assign({},PR_DEF,o)}
 function prSet(k,v){const p=prCfg();p[k]=v;LS.set('pos.printers',JSON.stringify(p))}
 function b64(bytes){
@@ -1160,6 +1161,10 @@ function nativeSend(target,host,bytes){
   try{return String(window.AndroidPrinter.send(target,host||'',b64(bytes)))}
   catch(e){return 'Printer error: '+(e&&e.message?e.message:e)}
 }
+function nativeSendOps(target,host,job){
+  try{return String(window.AndroidPrinter.sendOps(target,host||'',JSON.stringify(job)))}
+  catch(e){return 'Printer error: '+(e&&e.message?e.message:e)}
+}
 function printTo(which,build,okMsg,quiet){
   const p=prCfg();
   const lan=which==='kitchen'||p.cashierMode==='lan';
@@ -1167,15 +1172,55 @@ function printTo(which,build,okMsg,quiet){
   if(lan&&!host){toast('Set the '+which+' printer IP in Menu → Printers first.');return}
   if(!quiet)toast('Printing…');
   setTimeout(function(){
-    let bytes;
-    try{bytes=build()}catch(e){toast('Could not build the print job.');return}
-    const r=nativeSend(lan?'lan':'usb',host,bytes);
-    if(r!=='OK'||!quiet)toast(r==='OK'?okMsg:r);
+    let job;
+    try{job=build()}catch(e){toast('Could not build the print job.');return}
+    const target=lan?'lan':'usb';
+    const r=(job&&job.ops)?nativeSendOps(target,host,job):nativeSend(target,host,job);
+    if(r==='OK'){if(!quiet)toast(okMsg)}
+    else{toast(r);if(window.__showErr)window.__showErr('Could not print ('+which+'): '+r+(lan?'  [printer '+host+']':''))}
   },60);
 }
 function kickDrawer(){if(NATIVE&&prCfg().autoDrawer)printTo('cashier',function(){return [0x1B,0x40].concat(ESC_DRAWER)},'',true)}
 function printCashier(o){printTo('cashier',function(){return receiptBytes(o)},'Receipt printed')}
-function printKitchen(o,quiet){printTo('kitchen',function(){return withPaper('kitchen',function(){return rowsBytes(kitchenRows(o),false)})},'Kitchen ticket printed',quiet)}
+function kitchenCols(){return prCfg().kitchenPaper==='58'?42:64}
+function textKitchen(){return prCfg().kitchenStyle!=='picture'&&NATIVE&&typeof window.AndroidPrinter.sendOps==='function'}
+function kitchenItem(l){
+  let ta=l.ta,bn=l.bn,add=l.add;
+  if(bn===undefined){
+    let n=String(l.n||'');
+    const m=/ \(Takeaway \+[0-9.]+\)$/;
+    if(m.test(n)){ta=true;n=n.replace(m,'')}
+    const parts=n.split(' + ');
+    bn=parts[0];add=parts.slice(1).join(' + ').split(', ').filter(Boolean);
+  }
+  return {ta:!!ta,name:bn+(l.e?' '+l.e:''),add:add||[],q:l.q};
+}
+function kitchenOps(o){
+  const items=o.lines.map(kitchenItem);
+  const qty=items.reduce((n,i)=>n+i.q,0),nta=items.filter(i=>i.ta).length;
+  const typ=nta===0?'Dine in':(nta===items.length?'Takeaway':'Dine in + Takeaway');
+  const ops=[
+    {t:'text',s:'#'+pad2(o.no,4),a:'r',h:1,w:1,b:1},
+    {t:'lr',l:typ,r:'POS',h:1,b:1},
+    {t:'lr',l:'Order Time',r:fmtTime(o.t)}
+  ];
+  if(o.note)ops.push({t:'text',s:'Note: '+o.note,a:'l',h:1,b:1});
+  ops.push({t:'lr',l:'Name',r:'Num('+qty+')',h:1},{t:'line'});
+  items.forEach(it=>{
+    ops.push({t:'lr',l:(it.ta?'(T)':'')+it.name,r:String(it.q),h:1,b:1});
+    it.add.forEach(a=>ops.push({t:'text',s:'+ '+a,a:'l',h:1,b:1}));
+  });
+  ops.push({t:'line'},{t:'feed',n:3});
+  return {cols:kitchenCols(),ops:ops};
+}
+function testOps(t){
+  return {cols:kitchenCols(),ops:[{t:'text',s:'PRINTER TEST',a:'c',h:1,w:1,b:1},{t:'text',s:t,a:'c',h:1},{t:'text',s:new Date().toLocaleString(),a:'c'},{t:'line'},{t:'text',s:'二佬糖水铺 Er Lao',a:'c',h:1,b:1},{t:'feed',n:3}]};
+}
+function printKitchen(o,quiet){
+  printTo('kitchen',function(){
+    return textKitchen()?kitchenOps(o):withPaper('kitchen',function(){return rowsBytes(kitchenRows(o),false)});
+  },'Kitchen ticket printed',quiet);
+}
 function testRows(t){return [{t:'c',bold:true,fs:40,h:56,s:'PRINTER TEST'},{t:'c',fs:26,h:36,s:t},{t:'c',fs:22,h:30,s:new Date().toLocaleString()},{t:'line'},{t:'c',bold:true,fs:30,h:40,s:S.cfg.shop},{t:'gap',h:10}]}
 function printersCard(){
   const p=prCfg();
@@ -1184,6 +1229,7 @@ function printersCard(){
     '<label class="fld">Cashier printer connection<select id="prMode"><option value="usb"'+(p.cashierMode==='usb'?' selected':'')+'>USB cable</option><option value="lan"'+(p.cashierMode==='lan'?' selected':'')+'>Network (LAN)</option></select></label>'+
     '<label class="fld">Cashier printer IP (network only)<input id="prCashIp" inputmode="decimal" placeholder="192.168.0.xx" value="'+esc(p.cashierIp)+'"></label>'+
     '<label class="fld">Kitchen printer IP<input id="prKitIp" inputmode="decimal" placeholder="192.168.0.23" value="'+esc(p.kitchenIp)+'"></label>'+
+    '<label class="fld">Kitchen ticket style<select id="prKitStyle"><option value="text"'+(p.kitchenStyle!=='picture'?' selected':'')+'>Plain text (like BigPOS)</option><option value="picture"'+(p.kitchenStyle==='picture'?' selected':'')+'>Picture (big text)</option></select></label>'+
     '<label class="fld">Cashier paper width<select id="prCashPaper"><option value="80"'+(p.cashierPaper==='80'?' selected':'')+'>80 mm</option><option value="58"'+(p.cashierPaper==='58'?' selected':'')+'>58 mm</option></select></label>'+
     '<label class="fld">Kitchen paper width<select id="prKitPaper"><option value="80"'+(p.kitchenPaper==='80'?' selected':'')+'>80 mm</option><option value="58"'+(p.kitchenPaper==='58'?' selected':'')+'>58 mm</option></select></label>'+
     '<label class="chk"><input type="checkbox" id="prLogo"'+(p.logoOn?' checked':'')+'>Print the logo at the top of receipts</label>'+
@@ -1348,7 +1394,7 @@ function act(a,b){
     }
     case 'kitchen-print':if(S.modal&&S.modal.order)printKitchen(S.modal.order);break;
     case 'pr-test-cash':printTo('cashier',function(){return rowsBytes(testRows('Cashier printer'),true)},'Test printed');break;
-    case 'pr-test-kit':printTo('kitchen',function(){return withPaper('kitchen',function(){return rowsBytes(testRows('Kitchen printer'),false)})},'Test printed');break;
+    case 'pr-test-kit':printTo('kitchen',function(){return textKitchen()?testOps('Kitchen printer'):withPaper('kitchen',function(){return rowsBytes(testRows('Kitchen printer'),false)})},'Test printed');break;
     case 'pr-drawer':printTo('cashier',function(){return [0x1B,0x40].concat(ESC_DRAWER)},'Drawer opened');break;
     case 'usb-pair':usbConnect(false).then(d=>{if(d)toast('Printer connected. It will stay connected on this tablet.')});break;
     case 'open-order':{const o=findOrder(id);if(o)openModal({type:'receipt',order:o,list:true});break}
