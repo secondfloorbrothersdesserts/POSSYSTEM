@@ -1563,7 +1563,7 @@ function startDb(db){
 
 
 /* ---------- Google Sheet online backup ---------- */
-const SHEET_PUBLIC_URL='';
+const SHEET_PUBLIC_URL='https://script.google.com/macros/s/AKfycbwukV7w-4ZRKllcVZKXdnACJz7h3-HPp7kXQAXpjLlctKkD4keGC6xgPfTl9-GHZMocpw/exec';
 function shCfg(){try{return Object.assign({url:'',secret:''},JSON.parse(LS.get('pos.sheet')||'{}'))}catch(e){return {url:'',secret:''}}}
 function shStat(){try{return JSON.parse(LS.get('pos.sheetstat')||'{}')}catch(e){return {}}}
 function shSent(){try{return JSON.parse(LS.get('pos.sheetsent')||'{}')}catch(e){return {}}}
