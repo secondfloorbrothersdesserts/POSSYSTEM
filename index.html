@@ -395,9 +395,10 @@ function persistLocal(){
   LS.set('pos.docs',JSON.stringify(S.docs));
   LS.set('pos.shifts',JSON.stringify(S.shifts));
   LS.set('pos.members',JSON.stringify(S.members));
+  if(typeof shKick==='function')shKick();
 }
 function saveCfg(){
-  if(!DB){LS.set('pos.cfg',JSON.stringify(S.cfg));return}
+  if(!DB){LS.set('pos.cfg',JSON.stringify(S.cfg));if(typeof shKick==='function')shKick();return}
   cfgDirty++;
   queue=queue.then(()=>DB.doc('config/menu').set(clone(S.cfg))).catch(fail).finally(()=>{cfgDirty--});
 }
@@ -598,6 +599,7 @@ function menuView(){
     (S.loadArm||S.loadArmN?'<p class="hint">This replaces all current items and add-ons with your 二佬糖水铺 menu. Tap the same button again to confirm.</p>':'')+
     '</section>'+
     printersCard()+
+    sheetCard()+
     '<section class="card"><div class="cardhead"><h2>Rewards</h2><button class="btn primary" data-act="add-reward">Add reward</button></div>'+
     (S.cfg.rewards.map(r=>'<button class="irow" data-act="edit-reward" data-id="'+esc(r.id)+'"><span class="in">'+esc(r.n)+'</span><span class="so"></span><span class="ip">'+r.pts+' pts</span></button>').join('')||'<p class="hint">No rewards yet.</p>')+
     '<p class="hint">These show on your customers\' points page, so they know what their points can be used for.</p></section>'+
@@ -1395,6 +1397,8 @@ function act(a,b){
     case 'kitchen-print':if(S.modal&&S.modal.order)printKitchen(S.modal.order);break;
     case 'pr-test-cash':printTo('cashier',function(){return rowsBytes(testRows('Cashier printer'),true)},'Test printed');break;
     case 'pr-test-kit':printTo('kitchen',function(){return textKitchen()?testOps('Kitchen printer'):withPaper('kitchen',function(){return rowsBytes(testRows('Kitchen printer'),false)})},'Test printed');break;
+    case 'sh-sync':{const c=shCfg();if(!c.url||!c.secret){toast('Enter the web link and password first.');break}toast('Saving…');sheetSync().then(s=>{toast(s&&s.err?'Problem: '+s.err:'Saved to your Google Sheet');softRender()});break}
+    case 'sh-resend':{const c=shCfg();if(!c.url||!c.secret){toast('Enter the web link and password first.');break}toast('Sending everything…');sheetSync(true).then(s=>{toast(s&&s.err?'Problem: '+s.err:'Everything sent');softRender()});break}
     case 'pr-drawer':printTo('cashier',function(){return [0x1B,0x40].concat(ESC_DRAWER)},'Drawer opened');break;
     case 'usb-pair':usbConnect(false).then(d=>{if(d)toast('Printer connected. It will stay connected on this tablet.')});break;
     case 'open-order':{const o=findOrder(id);if(o)openModal({type:'receipt',order:o,list:true});break}
@@ -1514,6 +1518,7 @@ document.addEventListener('change',e=>{
   else if(id==='cfgPts'){S.cfg.ptsPerRM=Math.max(0,parseFloat(e.target.value)||0);saveCfg()}
   else if(id==='cfgTake'){S.cfg.takeFee=Math.max(0,parseFloat(e.target.value)||0);saveCfg()}
   else if(id==='ef-file')setPhoto(e.target.files&&e.target.files[0]);
+  else if(id==='shUrl'||id==='shSecret'){const c=shCfg();if(id==='shUrl')c.url=e.target.value.trim();else c.secret=e.target.value.trim();LS.set('pos.sheet',JSON.stringify(c));LS.set('pos.sheetsent','{}');toast('Saved');shKick()}
   else if(id==='prMode')prSet('cashierMode',e.target.value);
   else if(id==='prCashIp')prSet('cashierIp',e.target.value.trim());
   else if(id==='prKitIp')prSet('kitchenIp',e.target.value.trim());
@@ -1556,6 +1561,74 @@ function startDb(db){
   },fail);
 }
 
+
+/* ---------- Google Sheet online backup ---------- */
+const SHEET_PUBLIC_URL='';
+function shCfg(){try{return Object.assign({url:'',secret:''},JSON.parse(LS.get('pos.sheet')||'{}'))}catch(e){return {url:'',secret:''}}}
+function shStat(){try{return JSON.parse(LS.get('pos.sheetstat')||'{}')}catch(e){return {}}}
+function shSent(){try{return JSON.parse(LS.get('pos.sheetsent')||'{}')}catch(e){return {}}}
+const sn=x=>Number(x||0);
+function shRows(){
+  const R={Orders:[],Shifts:[],Members:[],Rewards:[]};
+  Object.keys(S.docs).forEach(k=>{(S.docs[k].orders||[]).forEach(o=>{
+    const d=new Date(o.t);
+    R.Orders.push([o.id,o.day,pad(d.getHours())+':'+pad(d.getMinutes()),o.no,(o.lines||[]).map(l=>l.n+' x'+l.q).join(', '),sn(o.sub),sn(o.disc),sn(o.tax),sn(o.rnd),sn(o.due!=null?o.due:o.total),mLabel(o.method),sn(o.recv),sn(o.change),o.phone||'',o.void?'VOID':'',o.note||'',o.shift||'',o.dev||''])
+  })});
+  Object.keys(S.shifts).forEach(k=>{const s=S.shifts[k],c=s.close;
+    R.Shifts.push([s.id,s.day,timeStr(s.open.t),sn(s.open.total),c?timeStr(c.t):'open',c?c.orders:'',c?sn(c.sales):'',c?sn(c.expected):'',c?sn(c.total):'',c?sn(c.diff):'',(c&&c.note)||s.open.note||''])});
+  Object.keys(S.members).forEach(k=>{const m=S.members[k];
+    R.Members.push([m.phone||k,m.name||'',sn(m.points),sn(m.visits),sn(m.spent),m.since||''])});
+  (S.cfg.rewards||[]).forEach(r=>R.Rewards.push([r.id,r.n,sn(r.pts),sn(r.val)]));
+  return R;
+}
+let shBusy=false,shTimer=null;
+function shKick(){clearTimeout(shTimer);shTimer=setTimeout(sheetSync,4000)}
+async function sheetSync(force){
+  const c=shCfg();
+  if(!c.url||!c.secret||shBusy)return;
+  if(typeof navigator!=='undefined'&&navigator.onLine===false)return;
+  shBusy=true;
+  let sent=force===true?{}:shSent(),stat={t:Date.now(),err:'',n:0};
+  try{
+    const R=shRows();
+    for(const kind of Object.keys(R)){
+      const todo=[];
+      R[kind].forEach(r=>{const key=kind+'|'+r[0],h=JSON.stringify(r);if(sent[key]!==h)todo.push([key,h,r])});
+      const replaceAll=kind==='Rewards'&&(todo.length>0||force===true);
+      const rowsAll=replaceAll?R[kind].map(r=>[r,kind+'|'+r[0],JSON.stringify(r)]):null;
+      if(!todo.length&&!replaceAll)continue;
+      const batch=replaceAll?rowsAll.map(x=>[x[1],x[2],x[0]]):todo;
+      for(let i=0;i<Math.max(batch.length,1);i+=100){
+        const part=batch.slice(i,i+100);
+        const res=await fetch(c.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+          body:JSON.stringify({secret:c.secret,kind:kind,rows:part.map(x=>x[2]),replaceAll:replaceAll&&i===0})});
+        const j=await res.json();
+        if(!j.ok)throw new Error(j.error||'Sheet refused');
+        part.forEach(x=>{sent[x[0]]=x[1]});stat.n+=part.length;
+        LS.set('pos.sheetsent',JSON.stringify(sent));
+      }
+    }
+  }catch(e){stat.err=String(e&&e.message||e)}
+  shBusy=false;
+  if(!stat.err)stat.ok=Date.now();else stat.ok=shStat().ok||0;
+  LS.set('pos.sheetstat',JSON.stringify(stat));
+  if(S.tab==='menu'&&!S.modal&&typeof softRender==='function'&&!(document.activeElement&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)))softRender();
+  return stat;
+}
+function sheetCard(){
+  const c=shCfg(),st=shStat();
+  let line='';
+  if(!c.url)line='Not connected yet.';
+  else if(st.err)line='<b style="color:#B3261E">Problem:</b> '+esc(st.err)+(st.ok?' · last saved '+esc(new Date(st.ok).toLocaleString()):'');
+  else if(st.ok)line='<b style="color:#1B7F3B">Connected.</b> Last saved '+esc(new Date(st.ok).toLocaleString())+(st.n?' ('+st.n+' updated)':'');
+  else line='Connected. Waiting for the first save…';
+  return '<section class="card"><h2>Online backup (Google Sheet)</h2>'+
+    '<p class="hint">Copies every order, till report and member to your own Google Sheet, and lets customers check their points online. '+line+'</p>'+
+    '<label class="fld">Sheet web link<input id="shUrl" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" value="'+esc(c.url)+'"></label>'+
+    '<label class="fld">Sheet password<input id="shSecret" value="'+esc(c.secret)+'" autocomplete="off"></label>'+
+    '<div class="btnrow"><button class="btn primary" data-act="sh-sync">Save now</button><button class="btn" data-act="sh-resend">Send everything again</button></div></section>';
+}
+
 /* ---------- customer-only points view ---------- */
 const CUSTOMER_MODE=location.search.indexOf('view=customer')>=0;
 const CS={phone:'',sub:null,found:null,searched:false};
@@ -1570,12 +1643,21 @@ function custRender(){
       '<div class="due" style="margin-top:16px"><span>'+esc(CS.found.name||'Member')+'</span><strong>'+pts+' pts</strong></div>'+
       '<h3>What you can use your points for</h3>'+(rewards.length?rewards.map(r=>'<div class="kv"><span>'+esc(r.n)+'</span><span>'+(pts>=r.pts?'✓ ready':r.pts+' pts')+'</span></div>').join(''):'<p class="hint">No rewards set up yet — ask at the counter.</p>')
       :'<p class="hint" style="margin-top:14px">No member found with that number. Ask at the counter to join.</p>')
-    :'')+'</div></div>';
+    :'')+(CS.loading?'<p class="hint" style="margin-top:14px">Checking…</p>':'')+(CS.err?'<p class="hint" style="margin-top:14px">Could not reach the points service. Please try again.</p>':'')+'</div></div>';
 }
 function custSearch(raw){
   const p=normPhone(raw);
-  CS.phone=raw;CS.searched=true;CS.found=null;
+  CS.phone=raw;CS.searched=true;CS.found=null;CS.err=false;
   if(CS.sub){CS.sub();CS.sub=null}
+  if(p&&SHEET_PUBLIC_URL){
+    CS.loading=true;custRender();
+    fetch(SHEET_PUBLIC_URL+(SHEET_PUBLIC_URL.indexOf('?')>=0?'&':'?')+'phone='+encodeURIComponent(p)).then(r=>r.json()).then(j=>{
+      CS.loading=false;CS.found=j&&j.found?{name:j.name,points:j.points}:null;
+      if(j&&j.rewards)S.cfg.rewards=j.rewards.map((r,i)=>({id:'r'+i,n:r.n,pts:r.pts,val:0}));
+      custRender();
+    }).catch(()=>{CS.loading=false;CS.found=null;CS.err=true;custRender()});
+    return;
+  }
   if(p&&DB)CS.sub=DB.doc('members/'+p).onSnapshot(s=>{CS.found=(s&&s.exists)?clone(s.data()):null;custRender()},()=>{CS.found=null;custRender()});
   else if(p)CS.found=S.members[p]||null;
   custRender();
@@ -1597,6 +1679,7 @@ if(CUSTOMER_MODE){
 }else{
   render();
   syncPrint();
+  setInterval(()=>sheetSync(),60000);setTimeout(()=>sheetSync(),3000);
   (async function(){
     try{
       if(!window.claude||!window.claude.use)return;
