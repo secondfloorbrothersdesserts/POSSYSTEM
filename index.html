@@ -540,7 +540,8 @@ function sellView(){
       (t.disc>0?'<div class="sr"><span>Discount</span><span>−'+t.disc.toFixed(2)+'</span></div>':'')+
       (t.tax>0?'<div class="sr"><span>Tax '+S.cfg.taxPct+'%</span><span>'+t.tax.toFixed(2)+'</span></div>':'')+
       '<div class="sr tot"><span>Total</span><span>'+rm(t.total)+'</span></div></div>'+
-    '<button class="charge" data-act="charge"'+(t.count?'':' disabled')+'>Take payment</button></aside>'+
+    '<button class="charge" data-act="charge"'+(t.count?'':' disabled')+'>Take payment</button>'+
+    '<div class="btnrow" style="margin:8px 0 0"><button class="btn" style="flex:1" data-act="plat" data-v="Grab"'+(t.count?'':' disabled')+'>Grab (no sale)</button><button class="btn" style="flex:1" data-act="plat" data-v="Shopee"'+(t.count?'':' disabled')+'>Shopee (no sale)</button></div></aside>'+
     (t.count?'<button class="cartbar" data-act="cart-toggle"><span>'+t.count+' item'+(t.count>1?'s':'')+'</span><span>View order  '+rm(t.total)+'</span></button>':'')+
   '</div>';
 }
@@ -1139,7 +1140,7 @@ function wrapText(str,fs,bold,maxW){
 function kitchenRows(o){
   const rows=[];
   rows.push({t:'c',bold:true,fs:34,h:46,s:'KITCHEN'});
-  rows.push({t:'c',bold:true,fs:64,h:78,s:'#'+pad2(o.no,4)});
+  rows.push({t:'c',bold:true,fs:64,h:78,s:(o.tag||('#'+pad2(o.no,4)))+(o.src?' '+o.src:'')});
   rows.push({t:'c',fs:24,h:34,s:fmtTime(o.t)});
   if(o.note)wrapText(o.note,28,true,548).forEach(s=>rows.push({t:'c',bold:true,fs:28,h:38,s:s}));
   rows.push({t:'line'});
@@ -1202,8 +1203,8 @@ function kitchenOps(o){
   const qty=items.reduce((n,i)=>n+i.q,0),nta=items.filter(i=>i.ta).length;
   const typ=nta===0?'Dine in':(nta===items.length?'Takeaway':'Dine in + Takeaway');
   const ops=[
-    {t:'text',s:'#'+pad2(o.no,4),a:'r',h:1,w:1,b:1},
-    {t:'lr',l:typ,r:'POS',h:1,b:1},
+    {t:'text',s:o.tag||('#'+pad2(o.no,4)),a:'r',h:1,w:1,b:1},
+    {t:'lr',l:typ,r:o.src||'POS',h:1,b:1},
     {t:'lr',l:'Order Time',r:fmtTime(o.t)}
   ];
   if(o.note)ops.push({t:'text',s:'Note: '+o.note,a:'l',h:1,b:1});
@@ -1374,6 +1375,16 @@ function act(a,b){
     case 'addon-confirm':{const M=S.modal,chosen=Object.values(M.sel).flat().map(findOpt).filter(Boolean);addLine(M.id,chosen,M.ta);closeModal();break}
     case 'clear':S.cart=[];S.disc={t:'pct',v:0};S.cartOpen=false;render();break;
     case 'cart-toggle':S.cartOpen=!S.cartOpen;render();break;
+    case 'plat':{
+      const t=totals();if(!t.count)break;
+      const src=b.dataset.v,day=dayKey();let c={};try{c=JSON.parse(LS.get('pos.platn')||'{}')}catch(x){}
+      if(c.day!==day)c={day:day};c[src]=(c[src]||0)+1;LS.set('pos.platn',JSON.stringify(c));
+      const o={t:new Date().toISOString(),no:c[src],tag:src.charAt(0)+c[src],src:src,note:'',
+        lines:t.lines.map(l=>({n:l.bn+((l.add&&l.add.length)?' + '+l.add.join(', '):''),bn:l.bn,add:l.add,ta:true,e:l.e,p:0,q:l.q}))};
+      printKitchen(o);
+      S.cart=[];S.disc={t:'pct',v:0};S.cartOpen=false;render();
+      toast(src+' order '+o.tag+' sent to kitchen (not counted in sales)');
+      break}
     case 'charge':if(totals().count){S.pay={method:'cash',recv:'',note:'',phone:'',redeem:null};openModal({type:'pay'})}break;
     case 'method':S.pay.method=v;renderModal();updateChange();break;
     case 'redeem':{
