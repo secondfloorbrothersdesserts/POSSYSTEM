@@ -1592,6 +1592,18 @@ function shRows(){
   (S.cfg.rewards||[]).forEach(r=>R.Rewards.push([r.id,r.n,sn(r.pts),sn(r.val)]));
   return R;
 }
+let nhId=0;const nhWait={};
+window.__nh=function(id,s){const f=nhWait[id];if(f){delete nhWait[id];try{f(JSON.parse(s))}catch(e){f({status:0,error:'bad reply'})}}};
+function shHttp(method,url,body){
+  if(NATIVE&&typeof window.AndroidPrinter.httpAsync==='function'){
+    return new Promise(res=>{const id=++nhId;nhWait[id]=r=>{
+      if(!r.status)return res({err:'No internet or link not reachable ('+(r.error||'')+')'});
+      let j=null;try{j=JSON.parse(r.text)}catch(e){}
+      res(j?{j:j}:{err:'The link did not answer correctly (code '+r.status+'). In Apps Script, set Who has access to Anyone.'});
+    };window.AndroidPrinter.httpAsync(id,method,url,body||'')});
+  }
+  return fetch(url,method==='POST'?{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body}:{}).then(r=>r.json()).then(j=>({j:j})).catch(e=>({err:'Failed to reach Google ('+e.message+')'}));
+}
 let shBusy=false,shTimer=null;
 function shKick(){clearTimeout(shTimer);shTimer=setTimeout(sheetSync,4000)}
 async function sheetSync(force){
@@ -1611,9 +1623,9 @@ async function sheetSync(force){
       const batch=replaceAll?rowsAll.map(x=>[x[1],x[2],x[0]]):todo;
       for(let i=0;i<Math.max(batch.length,1);i+=100){
         const part=batch.slice(i,i+100);
-        const res=await fetch(c.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
-          body:JSON.stringify({secret:c.secret,kind:kind,rows:part.map(x=>x[2]),replaceAll:replaceAll&&i===0})});
-        const j=await res.json();
+        const res=await shHttp('POST',c.url,JSON.stringify({secret:c.secret,kind:kind,rows:part.map(x=>x[2]),replaceAll:replaceAll&&i===0}));
+        if(res.err)throw new Error(res.err);
+        const j=res.j;
         if(!j.ok)throw new Error(j.error||'Sheet refused');
         part.forEach(x=>{sent[x[0]]=x[1]});stat.n+=part.length;
         LS.set('pos.sheetsent',JSON.stringify(sent));

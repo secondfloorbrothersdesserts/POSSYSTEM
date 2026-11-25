@@ -38,6 +38,58 @@ public class PrinterBridge {
     private final UsbManager usb;
     private final Object lock = new Object();
 
+    private android.webkit.WebView web;
+
+    public void attach(android.webkit.WebView w) {
+        this.web = w;
+    }
+
+    /** Async HTTP (follows redirects, no browser CORS rules). Result comes back via window.__nh(id, json). */
+    @JavascriptInterface
+    public void httpAsync(final int id, final String method, final String url, final String body) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String out;
+                try {
+                    java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+                    c.setInstanceFollowRedirects(true);
+                    c.setConnectTimeout(15000);
+                    c.setReadTimeout(30000);
+                    c.setRequestMethod(method);
+                    if ("POST".equals(method)) {
+                        c.setDoOutput(true);
+                        c.setRequestProperty("Content-Type", "text/plain;charset=utf-8");
+                        OutputStream os = c.getOutputStream();
+                        os.write(body.getBytes("UTF-8"));
+                        os.close();
+                    }
+                    java.io.InputStream in = c.getResponseCode() >= 400 ? c.getErrorStream() : c.getInputStream();
+                    ByteArrayOutputStream bo = new ByteArrayOutputStream();
+                    byte[] buf = new byte[4096];
+                    int n;
+                    while (in != null && (n = in.read(buf)) > 0) bo.write(buf, 0, n);
+                    out = new JSONObject().put("status", c.getResponseCode()).put("text", bo.toString("UTF-8")).toString();
+                } catch (Throwable t) {
+                    try {
+                        out = new JSONObject().put("status", 0).put("error", String.valueOf(t.getMessage())).toString();
+                    } catch (Exception e) {
+                        out = "{\"status\":0}";
+                    }
+                }
+                final String js = "window.__nh&&window.__nh(" + id + "," + JSONObject.quote(out) + ")";
+                if (web != null) {
+                    web.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            web.evaluateJavascript(js, null);
+                        }
+                    });
+                }
+            }
+        }).start();
+    }
+
     public PrinterBridge(Context ctx) {
         this.ctx = ctx;
         this.usb = (UsbManager) ctx.getSystemService(Context.USB_SERVICE);
@@ -79,7 +131,7 @@ public class PrinterBridge {
 
     @JavascriptInterface
     public String version() {
-        return "1.6";
+        return "1.7";
     }
 
 

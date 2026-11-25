@@ -49,7 +49,9 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(false);
         s.setBuiltInZoomControls(false);
 
-        web.addJavascriptInterface(new PrinterBridge(getApplicationContext()), "AndroidPrinter");
+        PrinterBridge bridge = new PrinterBridge(getApplicationContext());
+        bridge.attach(web);
+        web.addJavascriptInterface(bridge, "AndroidPrinter");
         web.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
