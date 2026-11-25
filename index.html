@@ -614,10 +614,17 @@ function menuView(){
       '<button class="irow" data-act="edit-item" data-id="'+esc(i.id)+'"><span class="in">'+esc(i.n)+'<small>'+esc(i.e||'')+'</small></span><span class="so">'+(i.off?'Sold out':'')+'</span><span class="ip">'+Number(i.p).toFixed(2)+'</span></button>').join('')).join('')||'<p class="hint">No items yet.</p>')+
     '<p class="hint">The starting menu and prices are samples. Tap any item to change its name, price or category.</p></section></div></div>';
 }
+function salesStrip(){
+  const today=dayKey(),mon=today.slice(0,7);
+  let td=0,tn=0,md=0,mn=0;
+  Object.values(S.docs).forEach(d=>{if(String(d.day).slice(0,7)!==mon)return;(d.orders||[]).forEach(o=>{if(o.void)return;md+=o.due;mn++;if(o.day===today){td+=o.due;tn++}})});
+  const box=(t,v,n)=>'<div style="flex:1;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px"><div style="font-size:12px;opacity:.7">'+t+'</div><div style="font:700 22px/1.2 var(--serif)">'+rm(r2(v))+'</div><div style="font-size:12px;opacity:.7">'+n+' order'+(n===1?'':'s')+'</div></div>';
+  return '<div style="display:flex;gap:10px;margin:0 0 12px">'+box('Today',td,tn)+box('This month ('+mon+')',md,mn)+'</div>';
+}
 function render(){
   const keep={};document.querySelectorAll('[data-keep]').forEach(el=>{keep[el.dataset.keep]=el.scrollTop});
   if(S.tab!=='sell')S.cartOpen=false;
-  $('#view').innerHTML=S.tab==='sell'?sellView():S.tab==='orders'?ordersView():S.tab==='till'?tillView():S.tab==='members'?membersView():menuView();
+  $('#view').innerHTML=(S.tab==='orders'||S.tab==='till'?salesStrip():'')+(S.tab==='sell'?sellView():S.tab==='orders'?ordersView():S.tab==='till'?tillView():S.tab==='members'?membersView():menuView());
   document.querySelectorAll('[data-keep]').forEach(el=>{if(keep[el.dataset.keep]!=null)el.scrollTop=keep[el.dataset.keep]});
   paintHead();
 }
@@ -1283,49 +1290,105 @@ function saveMove(){
   s.moves.push({t:new Date().toISOString(),amt:r2(M.kind==='out'?-amt:amt),note:$('#mv-n').value.trim()});
   saveShift(s.id);closeModal();
 }
+function shiftStats(s){
+  const all=Object.values(S.docs).flatMap(d=>d.orders).filter(o=>o.shift===s.id);
+  const live=all.filter(o=>!o.void),voids=all.filter(o=>o.void);
+  const sum=(arr,f)=>r2(arr.reduce((a,o)=>a+f(o),0));
+  const pack=o=>o.lines.reduce((a,l)=>{const m=/\(Takeaway \+([0-9.]+)\)$/.exec(String(l.n||''));return a+(m?parseFloat(m[1])*l.q:0)},0);
+  const voucher=o=>Math.max(0,r2(o.sub-o.disc+o.tax-(o.due-o.rnd)));
+  const qty=arr=>arr.reduce((a,o)=>a+o.lines.reduce((x,l)=>x+l.q,0),0);
+  const by={},vby={};
+  live.forEach(o=>{by[o.method]=r2((by[o.method]||0)+o.due)});
+  voids.forEach(o=>{vby[o.method]=r2((vby[o.method]||0)+o.due)});
+  const packing=sum(live,pack);
+  return {live:live,voids:voids,count:live.length,qty:qty(live),vcount:voids.length,vqty:qty(voids),
+    packing:packing,product:r2(sum(live,o=>o.sub)-packing),disc:sum(live.filter(o=>!(o.disc>0)?false:true),o=>o.disc),
+    discN:live.filter(o=>o.disc>0).length,voucher:sum(live,voucher),voucherN:live.filter(o=>voucher(o)>0).length,
+    tax:sum(live,o=>o.tax),rnd:sum(live,o=>o.rnd),sales:sum(live,o=>o.due),by:by,vby:vby,vtotal:sum(voids,o=>o.due)};
+}
+function reportData(s){
+  const c=s.close,st=shiftStats(s),mv=s.moves||[],D=[];
+  const money=n=>Number(n).toFixed(2),sgn=n=>(n<0?'-':'')+Math.abs(n).toFixed(2);
+  const kv=(l,r,b)=>D.push({t:'kv',l:l,r:r,b:!!b});
+  const dur=Math.max(0,Math.round((new Date(c.t)-new Date(s.open.t))/60000));
+  D.push({t:'title',s:'Shift report'});
+  kv('Start',s.day+' '+timeStr(s.open.t));
+  kv('End',dayKey(new Date(c.t))+' '+timeStr(c.t));
+  kv('Shift duration',Math.floor(dur/60)+' hours '+(dur%60)+' mins');
+  D.push({t:'line'});
+  D.push({t:'title',s:'Summary'});
+  kv('Product amount (exc tax)',money(st.product));
+  kv('Discount',sgn(-st.disc));
+  kv('Voucher total',sgn(-st.voucher));
+  kv('Packing fee',money(st.packing));
+  kv('Tax',money(st.tax));
+  kv('Round down',(st.rnd>=0?'+':'-')+Math.abs(st.rnd).toFixed(2));
+  kv('Actual sales',money(st.sales),true);
+  D.push({t:'line'});
+  D.push({t:'title',s:'Discount reason'});
+  D.push({t:'cols',a:'Name',b:'Qty',c:'Amount',b2:true});
+  D.push({t:'cols',a:'Discount',b:String(st.discN),c:money(st.disc)});
+  D.push({t:'cols',a:'Reward redeemed',b:String(st.voucherN),c:money(st.voucher)});
+  D.push({t:'line'});
+  D.push({t:'title',s:'Transactions'});
+  kv('Checked out',String(st.count));
+  kv('Average income value',money(st.count?st.sales/st.count:0));
+  kv('Sold products',String(st.qty));
+  kv('Refund',String(st.vcount));
+  kv('Refunded products',String(st.vqty));
+  D.push({t:'line'});
+  D.push({t:'title',s:'Cash drawer report'});
+  const pin=r2(mv.filter(m=>m.amt>0).reduce((a,m)=>a+m.amt,0)),pout=r2(-mv.filter(m=>m.amt<0).reduce((a,m)=>a+m.amt,0));
+  kv('Starting cash',money(s.open.total));
+  kv('Order income',money(st.by.cash||0));
+  kv('Pay in',money(pin));
+  kv('Refund',sgn(-(st.vby.cash||0)));
+  kv('Pay out',money(pout));
+  kv('Expected cash',money(c.expected));
+  kv('Actual ending cash',money(c.total),true);
+  kv(c.diff===0?'Balanced':(c.diff>0?'Over':'Short'),money(Math.abs(c.diff)),true);
+  D.push({t:'line'});
+  D.push({t:'title',s:'Payment report'});
+  D.push({t:'cols',a:'Payment Method',b:'Amount',c:'Percent'});
+  METHODS.forEach(m=>{if(st.by[m[0]]!=null)D.push({t:'cols',a:m[1],b:money(st.by[m[0]]),c:(st.sales?st.by[m[0]]/st.sales*100:0).toFixed(2)+'%'})});
+  D.push({t:'kv',l:'Total',r:money(st.sales),b:true});
+  if(st.vcount){
+    D.push({t:'line'});
+    D.push({t:'title',s:'Refund report'});
+    D.push({t:'cols',a:'Method',b:'Amount',c:'Percent'});
+    METHODS.forEach(m=>{if(st.vby[m[0]]!=null)D.push({t:'cols',a:m[1],b:money(st.vby[m[0]]),c:(st.vtotal?st.vby[m[0]]/st.vtotal*100:0).toFixed(2)+'%'})});
+    D.push({t:'kv',l:'Total',r:money(st.vtotal),b:true});
+  }
+  const cc=c.counts||{},dr=DENOMS.filter(d=>cc[Math.round(d*100)]>0);
+  if(dr.length){D.push({t:'line'});D.push({t:'title',s:'Cash counted'});dr.forEach(d=>{const k=Math.round(d*100);kv((d>=1?'RM '+d:k+' sen')+' x '+cc[k],money(k/100*cc[k]))})}
+  if(c.note){D.push({t:'line'});D.push({t:'note',s:'Note: '+c.note})}
+  D.push({t:'line'});
+  kv('Print Time',dayKey().slice(5)+' '+timeStr(new Date().toISOString()));
+  return D;
+}
 function reportRows(s){
-  const c=s.close,by=c.by||{},mv=s.moves||[],p=prCfg(),rows=[];
-  const LR=(l,r,b)=>rows.push({t:'lr',fs:26,h:36,bold:!!b,l:l,r:r});
+  const p=prCfg(),rows=[];
   rows.push({t:'c',bold:true,fs:32,h:44,s:String(p.shopEn||'').trim()||S.cfg.shop});
-  rows.push({t:'c',bold:true,fs:30,h:40,s:'TILL REPORT'});
-  rows.push({t:'c',fs:22,h:30,s:'Opened '+s.day+' '+timeStr(s.open.t)});
-  rows.push({t:'c',fs:22,h:30,s:'Closed '+dayKey(new Date(c.t))+' '+timeStr(c.t)});
-  rows.push({t:'line'});
-  LR('Orders',String(c.orders));
-  METHODS.forEach(m=>{if(by[m[0]]!=null)LR(m[1],Number(by[m[0]]).toFixed(2))});
-  LR('Total sales',Number(c.sales).toFixed(2),true);
-  rows.push({t:'line'});
-  LR('Opening float',s.open.total.toFixed(2));
-  LR('Cash sales',Number(by.cash||0).toFixed(2));
-  mv.forEach(m=>LR(m.note||(m.amt<0?'Cash out':'Cash in'),(m.amt<0?'-':'+')+Math.abs(m.amt).toFixed(2)));
-  LR('Should be',c.expected.toFixed(2));
-  LR('Counted',c.total.toFixed(2),true);
-  LR(c.diff===0?'Balanced':(c.diff>0?'Over':'Short'),Math.abs(c.diff).toFixed(2),true);
-  const cc=c.counts||{};
-  const dr=DENOMS.filter(d=>cc[Math.round(d*100)]>0);
-  if(dr.length){rows.push({t:'line'});dr.forEach(d=>{const k=Math.round(d*100);LR((d>=1?'RM '+d:k+' sen')+' x '+cc[k],(k/100*cc[k]).toFixed(2))})}
-  if(c.note){rows.push({t:'line'});rows.push({t:'l',fs:22,h:30,s:'Note: '+c.note})}
-  rows.push({t:'line'});
-  rows.push({t:'c',fs:20,h:28,s:'Printed '+new Date().toLocaleString()});
+  reportData(s).forEach(d=>{
+    if(d.t==='title')rows.push({t:'l',bold:true,fs:28,h:40,s:d.s});
+    else if(d.t==='kv')rows.push({t:'lr',fs:24,h:34,bold:d.b,l:d.l,r:d.r});
+    else if(d.t==='cols')rows.push({t:'cols',fs:22,h:32,a:d.a,b:d.b,c:d.c});
+    else if(d.t==='note')rows.push({t:'l',fs:22,h:30,s:d.s});
+    else if(d.t==='line')rows.push({t:'line'});
+  });
   rows.push({t:'gap',h:10});
   return rows;
 }
 function printReport(s){printTo('cashier',function(){return withPaper('cashier',function(){return rowsBytes(reportRows(s),false)})},'Report printed')}
 function reportHTML(s){
-  const c=s.close,by=c.by||{},mv=s.moves||[];
-  const R=(a,b,cl)=>'<div class="r '+(cl||'')+'"><span>'+a+'</span><span>'+b+'</span></div>';
-  let h='<div class="receipt" style="--rw:'+(S.cfg.paper==='80'?72:48)+'mm"><h3>'+esc(S.cfg.shop)+'</h3><div class="c b">Till report</div>'+
-    '<div class="c">Opened '+esc(s.day)+' '+timeStr(s.open.t)+'</div><div class="c">Closed '+esc(dayKey(new Date(c.t)))+' '+timeStr(c.t)+'</div><hr>'+
-    R('Orders',c.orders);
-  METHODS.forEach(m=>{if(by[m[0]]!=null)h+=R(esc(m[1]),Number(by[m[0]]).toFixed(2))});
-  h+=R('Total sales',Number(c.sales).toFixed(2),'b')+'<hr>'+R('Opening float',s.open.total.toFixed(2))+R('Cash sales',Number(by.cash||0).toFixed(2));
-  mv.forEach(m=>{h+=R(esc(m.note||(m.amt<0?'Cash out':'Cash in')),(m.amt<0?'-':'+')+Math.abs(m.amt).toFixed(2))});
-  h+=R('Should be',c.expected.toFixed(2))+R('Counted',c.total.toFixed(2),'b')+
-    R(c.diff===0?'Balanced':(c.diff>0?'Over':'Short'),Math.abs(c.diff).toFixed(2),'b');
-  const cc=c.counts||{};
-  const rows=DENOMS.filter(d=>cc[Math.round(d*100)]>0).map(d=>{const k=Math.round(d*100);return R((d>=1?'RM '+d:k+' sen')+' x '+cc[k],(k/100*cc[k]).toFixed(2))}).join('');
-  if(rows)h+='<hr>'+rows;
-  if(c.note)h+='<hr><div>Note: '+esc(c.note)+'</div>';
+  let h='<div class="receipt" style="--rw:'+(S.cfg.paper==='80'?72:48)+'mm"><h3>'+esc(S.cfg.shop)+'</h3>';
+  reportData(s).forEach(d=>{
+    if(d.t==='title')h+='<div class="b" style="margin-top:4px">'+esc(d.s)+'</div>';
+    else if(d.t==='kv')h+='<div class="r '+(d.b?'b':'')+'"><span>'+esc(d.l)+'</span><span>'+esc(d.r)+'</span></div>';
+    else if(d.t==='cols')h+='<div class="r"><span style="flex:2">'+esc(d.a)+'</span><span style="flex:1;text-align:right">'+esc(d.b)+'</span><span style="flex:1;text-align:right">'+esc(d.c)+'</span></div>';
+    else if(d.t==='note')h+='<div>'+esc(d.s)+'</div>';
+    else if(d.t==='line')h+='<hr>';
+  });
   return h+'</div>';
 }
 function reportModal(){
