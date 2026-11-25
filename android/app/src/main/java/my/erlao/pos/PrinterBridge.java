@@ -90,6 +90,80 @@ public class PrinterBridge {
         }).start();
     }
 
+    /** Looks for network printers (port 9100) on this tablet's Wi-Fi. Result via window.__nh(id, json). */
+    @JavascriptInterface
+    public void scanAsync(final int id) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String out;
+                try {
+                    String myIp = null;
+                    java.util.Enumeration<java.net.NetworkInterface> en = java.net.NetworkInterface.getNetworkInterfaces();
+                    while (en != null && en.hasMoreElements() && myIp == null) {
+                        java.net.NetworkInterface ni = en.nextElement();
+                        if (ni.isLoopback() || !ni.isUp()) continue;
+                        java.util.Enumeration<java.net.InetAddress> ad = ni.getInetAddresses();
+                        while (ad.hasMoreElements()) {
+                            java.net.InetAddress a = ad.nextElement();
+                            if (a instanceof java.net.Inet4Address && !a.isLoopbackAddress()) {
+                                myIp = a.getHostAddress();
+                                break;
+                            }
+                        }
+                    }
+                    JSONArray found = new JSONArray();
+                    if (myIp != null) {
+                        final String base = myIp.substring(0, myIp.lastIndexOf('.') + 1);
+                        java.util.concurrent.ExecutorService ex = java.util.concurrent.Executors.newFixedThreadPool(48);
+                        java.util.List<java.util.concurrent.Future<String>> fs = new java.util.ArrayList<>();
+                        for (int i = 1; i < 255; i++) {
+                            final String ip = base + i;
+                            fs.add(ex.submit(new java.util.concurrent.Callable<String>() {
+                                @Override
+                                public String call() {
+                                    Socket sk = new Socket();
+                                    try {
+                                        sk.connect(new InetSocketAddress(ip, 9100), 700);
+                                        return ip;
+                                    } catch (Exception e) {
+                                        return null;
+                                    } finally {
+                                        try {
+                                            sk.close();
+                                        } catch (Exception ignored) {
+                                        }
+                                    }
+                                }
+                            }));
+                        }
+                        for (java.util.concurrent.Future<String> f : fs) {
+                            String r = f.get();
+                            if (r != null) found.put(r);
+                        }
+                        ex.shutdown();
+                    }
+                    out = new JSONObject().put("status", 200).put("ip", myIp == null ? "" : myIp).put("found", found).toString();
+                } catch (Throwable t) {
+                    try {
+                        out = new JSONObject().put("status", 0).put("error", String.valueOf(t.getMessage())).toString();
+                    } catch (Exception e) {
+                        out = "{\"status\":0}";
+                    }
+                }
+                final String js = "window.__nh&&window.__nh(" + id + "," + JSONObject.quote(out) + ")";
+                if (web != null) {
+                    web.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            web.evaluateJavascript(js, null);
+                        }
+                    });
+                }
+            }
+        }).start();
+    }
+
     public PrinterBridge(Context ctx) {
         this.ctx = ctx;
         this.usb = (UsbManager) ctx.getSystemService(Context.USB_SERVICE);
@@ -131,7 +205,7 @@ public class PrinterBridge {
 
     @JavascriptInterface
     public String version() {
-        return "1.7";
+        return "1.8";
     }
 
 
