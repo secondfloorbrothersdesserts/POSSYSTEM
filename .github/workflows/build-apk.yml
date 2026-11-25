@@ -25,6 +25,13 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Get iMin drawer library
+        run: |
+          mkdir -p android/app/libs
+          curl -fL --retry 3 -o android/app/libs/IminLibs3.0.jar https://yimin-resources.oss-cn-shanghai.aliyuncs.com/demo/IminLibs3.0.jar || echo "iMin library download failed"
+          ls -la android/app/libs
+          unzip -l android/app/libs/IminLibs3.0.jar | grep -i "IminSDKManager" || true
+
       - name: Build APK
         working-directory: android
         run: gradle --no-daemon assembleLiveDebug assembleStagingDebug

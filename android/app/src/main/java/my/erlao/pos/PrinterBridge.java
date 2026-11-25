@@ -203,9 +203,42 @@ public class PrinterBridge {
         }
     }
 
+    /** iMin D-series: drawer plugged into the stand's RJ12 socket, opened with iMin's own library. */
+    @JavascriptInterface
+    public String drawerImin() {
+        String[] names = {"com.imin.library.IminSDKManager", "com.imin.IminSDKManager", "com.imin.libs.IminSDKManager"};
+        Class<?> c = null;
+        for (String n : names) {
+            try {
+                c = Class.forName(n);
+                break;
+            } catch (Throwable ignored) {
+            }
+        }
+        if (c == null) {
+            return "iMin drawer library is not in this app build.";
+        }
+        try {
+            java.lang.reflect.Method m;
+            try {
+                m = c.getMethod("opencashBox", Context.class);
+                Object target = java.lang.reflect.Modifier.isStatic(m.getModifiers()) ? null : c.newInstance();
+                m.invoke(target, ctx);
+            } catch (NoSuchMethodException e) {
+                m = c.getMethod("opencashBox");
+                Object target = java.lang.reflect.Modifier.isStatic(m.getModifiers()) ? null : c.newInstance();
+                m.invoke(target);
+            }
+            return "OK";
+        } catch (Throwable t) {
+            Throwable r = t.getCause() != null ? t.getCause() : t;
+            return "iMin drawer error: " + r;
+        }
+    }
+
     @JavascriptInterface
     public String version() {
-        return "1.8";
+        return "1.9";
     }
 
 

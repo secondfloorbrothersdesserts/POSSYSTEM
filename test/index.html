@@ -1116,7 +1116,7 @@ async function usbPrintReceipt(o){
 /* ---------- native app printing (Android app wrapper) ---------- */
 let nhId=0;const nhWait={};
 const NATIVE=!!(window.AndroidPrinter&&typeof window.AndroidPrinter.send==='function');
-const PR_DEF={drawerOn:'cashier',cashierMode:'usb',cashierIp:'',kitchenIp:'192.168.0.23',autoKitchen:true,autoDrawer:true,kitchenStyle:'text',cashierPaper:'80',kitchenPaper:'80',logoOn:true,shopEn:"SECOND FLOOR BROTHER'S DESSERTS",addr1:'JALAN SL 1/3, Bandar Sungai Long',addr2:'43000 Kajang, Selangor',footer:'Thank you! 谢谢惠顾'};
+const PR_DEF={drawerOn:'imin',cashierMode:'usb',cashierIp:'',kitchenIp:'192.168.0.23',autoKitchen:true,autoDrawer:true,kitchenStyle:'text',cashierPaper:'80',kitchenPaper:'80',logoOn:true,shopEn:"SECOND FLOOR BROTHER'S DESSERTS",addr1:'JALAN SL 1/3, Bandar Sungai Long',addr2:'43000 Kajang, Selangor',footer:'Thank you! 谢谢惠顾'};
 const ESC_CUT=[0x1D,0x56,0x42,0x00],ESC_DRAWER=[0x1B,0x70,0x00,0x19,0xFA];
 const PR_FIELDS={prKitStyle:'kitchenStyle',prCashPaper:'cashierPaper',prKitPaper:'kitchenPaper',prShopEn:'shopEn',prAddr1:'addr1',prAddr2:'addr2',prFooter:'footer'};
 function prCfg(){let o={};try{o=JSON.parse(LS.get('pos.printers')||'{}')||{}}catch(e){}return Object.assign({},PR_DEF,o)}
@@ -1186,10 +1186,21 @@ function printTo(which,build,okMsg,quiet){
     else{toast(r);if(window.__showErr)window.__showErr('Could not print ('+which+'): '+r+(lan?'  [printer '+host+']':''))}
   },60);
 }
-function drawerTarget(){return prCfg().drawerOn==='kitchen'?'kitchen':'cashier'}
+const HAS_IMIN=()=>NATIVE&&typeof window.AndroidPrinter.drawerImin==='function';
+function drawerTarget(){const d=prCfg().drawerOn;if(d==='kitchen')return 'kitchen';if(d==='cashier')return 'cashier';return HAS_IMIN()?'imin':'cashier'}
+function openDrawerNow(quiet){
+  const t=drawerTarget();
+  if(t==='imin'){
+    let r='';try{r=window.AndroidPrinter.drawerImin()}catch(e){r=String(e)}
+    if(r==='OK'){if(!quiet)toast('Drawer opened');return}
+    if(window.__showErr)window.__showErr('Cash drawer: '+r);else toast(r);
+    return;
+  }
+  printTo(t,drawerBytes,quiet?'':'Drawer opened',quiet);
+}
 const ESC_DRAWER2=[0x1B,0x70,0x01,0x19,0xFA];
 function drawerBytes(){return [0x1B,0x40].concat(ESC_DRAWER,ESC_DRAWER2)}
-function kickDrawer(){if(NATIVE&&prCfg().autoDrawer)printTo(drawerTarget(),drawerBytes,'',true)}
+function kickDrawer(){if(NATIVE&&prCfg().autoDrawer)openDrawerNow(true)}
 function printCashier(o){printTo('cashier',function(){return receiptBytes(o)},'Receipt printed')}
 function kitchenCols(){return prCfg().kitchenPaper==='58'?42:64}
 function textKitchen(){return prCfg().kitchenStyle!=='picture'&&NATIVE&&typeof window.AndroidPrinter.sendOps==='function'}
@@ -1253,7 +1264,7 @@ function printersCard(){
     '<label class="fld">Receipt address line 1<input id="prAddr1" value="'+esc(p.addr1)+'"></label>'+
     '<label class="fld">Receipt address line 2<input id="prAddr2" value="'+esc(p.addr2)+'"></label>'+
     '<label class="fld">Receipt footer message<input id="prFooter" value="'+esc(p.footer)+'"></label>'+
-    '<label class="fld">Cash drawer is plugged into<select id="prDrawerOn"><option value="kitchen"'+(drawerTarget()==='kitchen'?' selected':'')+'>The back (kitchen network) printer</option><option value="cashier"'+(drawerTarget()==='cashier'?' selected':'')+'>The front (cashier USB) printer</option></select></label>'+
+    '<label class="fld">Cash drawer is plugged into<select id="prDrawerOn"><option value="imin"'+(drawerTarget()==='imin'?' selected':'')+'>The tablet stand (iMin socket)</option><option value="kitchen"'+(drawerTarget()==='kitchen'?' selected':'')+'>The back (kitchen network) printer</option><option value="cashier"'+(drawerTarget()==='cashier'?' selected':'')+'>The front (cashier USB) printer</option></select></label>'+
     '<label class="chk"><input type="checkbox" id="prDrawer"'+(p.autoDrawer?' checked':'')+'>Open the cash drawer for cash payments and when counting the till</label>'+
     '<label class="chk"><input type="checkbox" id="prAuto"'+(p.autoKitchen?' checked':'')+'>Print a kitchen ticket automatically when an order is paid</label>'+
     '<p class="hint">Browser engine: '+esc((navigator.userAgent.match(/Chrome\/[0-9.]+/)||['unknown'])[0])+(NATIVE?' (app)':'')+'</p>'+
@@ -1454,7 +1465,7 @@ function act(a,b){
     case 'pr-test-kit':printTo('kitchen',function(){return textKitchen()?testOps('Kitchen printer'):withPaper('kitchen',function(){return rowsBytes(testRows('Kitchen printer'),false)})},'Test printed');break;
     case 'sh-sync':{const c=shCfg();if(!c.url||!c.secret){toast('Enter the web link and password first.');break}toast('Saving…');sheetSync().then(s=>{toast(s&&s.err?'Problem: '+s.err:'Saved to your Google Sheet');softRender()});break}
     case 'sh-resend':{const c=shCfg();if(!c.url||!c.secret){toast('Enter the web link and password first.');break}toast('Sending everything…');sheetSync(true).then(s=>{toast(s&&s.err?'Problem: '+s.err:'Everything sent');softRender()});break}
-    case 'pr-drawer':printTo(drawerTarget(),drawerBytes,'Drawer opened');break;
+    case 'pr-drawer':openDrawerNow(false);break;
     case 'pr-find':{
       if(!(NATIVE&&typeof window.AndroidPrinter.scanAsync==='function')){toast('Update the app to find printers.');break}
       S.found={busy:true};softRender();
