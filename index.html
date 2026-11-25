@@ -1267,7 +1267,7 @@ function printersCard(){
     '<label class="fld">Cash drawer is plugged into<select id="prDrawerOn"><option value="imin"'+(drawerTarget()==='imin'?' selected':'')+'>The tablet stand (iMin socket)</option><option value="kitchen"'+(drawerTarget()==='kitchen'?' selected':'')+'>The back (kitchen network) printer</option><option value="cashier"'+(drawerTarget()==='cashier'?' selected':'')+'>The front (cashier USB) printer</option></select></label>'+
     '<label class="chk"><input type="checkbox" id="prDrawer"'+(p.autoDrawer?' checked':'')+'>Open the cash drawer for cash payments and when counting the till</label>'+
     '<label class="chk"><input type="checkbox" id="prAuto"'+(p.autoKitchen?' checked':'')+'>Print a kitchen ticket automatically when an order is paid</label>'+
-    '<p class="hint">Browser engine: '+esc((navigator.userAgent.match(/Chrome\/[0-9.]+/)||['unknown'])[0])+(NATIVE?' (app)':'')+'</p>'+
+    '<p class="hint">Browser engine: '+esc((navigator.userAgent.match(/Chrome\/[0-9.]+/)||['unknown'])[0])+(NATIVE?' (app '+esc((function(){try{return window.AndroidPrinter.version()}catch(e){return '?'}})())+(HAS_IMIN()?', iMin drawer OK':', old app: no iMin drawer')+')':'')+'</p>'+
     '<div class="btnrow" style="margin-bottom:8px"><button class="btn" data-act="pr-find">'+(S.found&&S.found.busy?'Searching… (10 sec)':'Find printers on this Wi-Fi')+'</button></div>'+findBox()+
     '<div class="btnrow"><button class="btn" data-act="pr-test-cash">Test cashier printer</button><button class="btn" data-act="pr-test-kit">Test kitchen printer</button><button class="btn" data-act="pr-drawer">Open cash drawer</button></div></section>';
 }
