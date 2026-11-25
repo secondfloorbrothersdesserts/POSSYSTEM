@@ -31,6 +31,7 @@ jobs:
           curl -fL --retry 3 -o android/app/libs/IminLibs3.0.jar https://yimin-resources.oss-cn-shanghai.aliyuncs.com/demo/IminLibs3.0.jar || echo "iMin library download failed"
           ls -la android/app/libs
           unzip -l android/app/libs/IminLibs3.0.jar | grep -i "IminSDKManager" || true
+          cd /tmp && unzip -oq $GITHUB_WORKSPACE/android/app/libs/IminLibs3.0.jar 'com/device/manager/sdk/tiramusu/biz/IminSDKManager.class' && javap -cp /tmp com.device.manager.sdk.tiramusu.biz.IminSDKManager | grep -i cash || true
 
       - name: Build APK
         working-directory: android

@@ -206,7 +206,7 @@ public class PrinterBridge {
     /** iMin D-series: drawer plugged into the stand's RJ12 socket, opened with iMin's own library. */
     @JavascriptInterface
     public String drawerImin() {
-        String[] names = {"com.imin.library.IminSDKManager", "com.imin.IminSDKManager", "com.imin.libs.IminSDKManager"};
+        String[] names = {"com.device.manager.sdk.tiramusu.biz.IminSDKManager", "com.imin.library.IminSDKManager", "com.imin.IminSDKManager", "com.imin.libs.IminSDKManager"};
         Class<?> c = null;
         for (String n : names) {
             try {
