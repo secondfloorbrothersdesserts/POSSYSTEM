@@ -1116,7 +1116,7 @@ async function usbPrintReceipt(o){
 /* ---------- native app printing (Android app wrapper) ---------- */
 let nhId=0;const nhWait={};
 const NATIVE=!!(window.AndroidPrinter&&typeof window.AndroidPrinter.send==='function');
-const PR_DEF={drawerOn:'imin',cashierMode:'usb',cashierIp:'',kitchenIp:'192.168.0.23',autoKitchen:true,autoDrawer:true,kitchenStyle:'text',cashierPaper:'80',kitchenPaper:'80',logoOn:true,shopEn:"SECOND FLOOR BROTHER'S DESSERTS",addr1:'JALAN SL 1/3, Bandar Sungai Long',addr2:'43000 Kajang, Selangor',footer:'Thank you! 谢谢惠顾'};
+const PR_DEF={kitchenCopies:2,drawerOn:'imin',cashierMode:'usb',cashierIp:'',kitchenIp:'192.168.0.23',autoKitchen:true,autoDrawer:true,kitchenStyle:'text',cashierPaper:'80',kitchenPaper:'80',logoOn:true,shopEn:"SECOND FLOOR BROTHER'S DESSERTS",addr1:'JALAN SL 1/3, Bandar Sungai Long',addr2:'43000 Kajang, Selangor',footer:'Thank you! 谢谢惠顾'};
 const ESC_CUT=[0x1D,0x56,0x42,0x00],ESC_DRAWER=[0x1B,0x70,0x00,0x19,0xFA];
 const PR_FIELDS={prKitStyle:'kitchenStyle',prCashPaper:'cashierPaper',prKitPaper:'kitchenPaper',prShopEn:'shopEn',prAddr1:'addr1',prAddr2:'addr2',prFooter:'footer'};
 function prCfg(){let o={};try{o=JSON.parse(LS.get('pos.printers')||'{}')||{}}catch(e){}return Object.assign({},PR_DEF,o)}
@@ -1182,7 +1182,7 @@ function printTo(which,build,okMsg,quiet){
     try{job=build()}catch(e){toast('Could not build the print job.');return}
     const target=lan?'lan':'usb';
     const r=(job&&job.ops)?nativeSendOps(target,host,job):nativeSend(target,host,job);
-    if(r==='OK'){if(!quiet)toast(okMsg)}
+    if(r==='OK'){if(!quiet&&okMsg)toast(okMsg)}
     else{toast(r);if(window.__showErr)window.__showErr('Could not print ('+which+'): '+r+(lan?'  [printer '+host+']':''))}
   },60);
 }
@@ -1237,9 +1237,12 @@ function testOps(t){
   return {cols:kitchenCols(),ops:[{t:'text',s:'PRINTER TEST',a:'c',h:1,w:1,b:1},{t:'text',s:t,a:'c',h:1},{t:'text',s:new Date().toLocaleString(),a:'c'},{t:'line'},{t:'text',s:'二佬糖水铺 Er Lao',a:'c',h:1,b:1},{t:'feed',n:3}]};
 }
 function printKitchen(o,quiet){
-  printTo('kitchen',function(){
-    return textKitchen()?kitchenOps(o):withPaper('kitchen',function(){return rowsBytes(kitchenRows(o),false)});
-  },'Kitchen ticket printed',quiet);
+  const n=Math.max(1,Math.min(3,parseInt(prCfg().kitchenCopies,10)||1));
+  for(let i=0;i<n;i++){
+    printTo('kitchen',function(){
+      return textKitchen()?kitchenOps(o):withPaper('kitchen',function(){return rowsBytes(kitchenRows(o),false)});
+    },i===n-1?'Kitchen ticket printed'+(n>1?' ('+n+' copies)':''):'',quiet);
+  }
 }
 function testRows(t){return [{t:'c',bold:true,fs:40,h:56,s:'PRINTER TEST'},{t:'c',fs:26,h:36,s:t},{t:'c',fs:22,h:30,s:new Date().toLocaleString()},{t:'line'},{t:'c',bold:true,fs:30,h:40,s:S.cfg.shop},{t:'gap',h:10}]}
 function findBox(){
@@ -1256,6 +1259,7 @@ function printersCard(){
     '<label class="fld">Cashier printer connection<select id="prMode"><option value="usb"'+(p.cashierMode==='usb'?' selected':'')+'>USB cable</option><option value="lan"'+(p.cashierMode==='lan'?' selected':'')+'>Network (LAN)</option></select></label>'+
     '<label class="fld">Cashier printer IP (network only)<input id="prCashIp" inputmode="decimal" placeholder="192.168.0.xx" value="'+esc(p.cashierIp)+'"></label>'+
     '<label class="fld">Kitchen printer IP<input id="prKitIp" inputmode="decimal" placeholder="192.168.0.23" value="'+esc(p.kitchenIp)+'"></label>'+
+    '<label class="fld">Kitchen ticket copies<select id="prKitCopies"><option value="1"'+(+p.kitchenCopies===1?' selected':'')+'>1 copy</option><option value="2"'+(+p.kitchenCopies!==1&&+p.kitchenCopies!==3?' selected':'')+'>2 copies</option><option value="3"'+(+p.kitchenCopies===3?' selected':'')+'>3 copies</option></select></label>'+
     '<label class="fld">Kitchen ticket style<select id="prKitStyle"><option value="text"'+(p.kitchenStyle!=='picture'?' selected':'')+'>Plain text (like BigPOS)</option><option value="picture"'+(p.kitchenStyle==='picture'?' selected':'')+'>Picture (big text)</option></select></label>'+
     '<label class="fld">Cashier paper width<select id="prCashPaper"><option value="80"'+(p.cashierPaper==='80'?' selected':'')+'>80 mm</option><option value="58"'+(p.cashierPaper==='58'?' selected':'')+'>58 mm</option></select></label>'+
     '<label class="fld">Kitchen paper width<select id="prKitPaper"><option value="80"'+(p.kitchenPaper==='80'?' selected':'')+'>80 mm</option><option value="58"'+(p.kitchenPaper==='58'?' selected':'')+'>58 mm</option></select></label>'+
@@ -1593,6 +1597,7 @@ document.addEventListener('change',e=>{
   else if(id==='ef-file')setPhoto(e.target.files&&e.target.files[0]);
   else if(id==='shUrl'||id==='shSecret'){const c=shCfg();if(id==='shUrl')c.url=e.target.value.trim();else c.secret=e.target.value.trim();LS.set('pos.sheet',JSON.stringify(c));LS.set('pos.sheetsent','{}');toast('Saved');shKick()}
   else if(id==='prDrawerOn')prSet('drawerOn',e.target.value);
+  else if(id==='prKitCopies')prSet('kitchenCopies',parseInt(e.target.value,10)||1);
   else if(id==='prMode')prSet('cashierMode',e.target.value);
   else if(id==='prCashIp')prSet('cashierIp',e.target.value.trim());
   else if(id==='prKitIp')prSet('kitchenIp',e.target.value.trim());
