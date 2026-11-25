@@ -238,13 +238,41 @@ public class PrinterBridge {
 
     @JavascriptInterface
     public String version() {
-        return "1.9";
+        return "2.0";
     }
 
 
     /* ---------------- text tickets ---------------- */
 
     private static final Charset GBK = Charset.forName("GBK");
+
+    /** Width in printer dots: small font letters are 9 dots, Chinese characters 24 dots. */
+    private static int dots(String s) {
+        int w = 0;
+        for (int i = 0; i < s.length(); i++) w += s.charAt(i) > 0x7F ? 24 : 9;
+        return w;
+    }
+
+    private static java.util.List<String> wrapDots(String s, int maxDots) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        int w = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            int cw = c > 0x7F ? 24 : 9;
+            if (w + cw > maxDots && cur.length() > 0) {
+                out.add(cur.toString());
+                cur.setLength(0);
+                w = 0;
+                if (c == ' ') continue;
+            }
+            cur.append(c);
+            w += cw;
+        }
+        if (cur.length() > 0) out.add(cur.toString());
+        if (out.isEmpty()) out.add("");
+        return out;
+    }
 
     private static int dispWidth(String s) {
         int w = 0;
@@ -306,16 +334,19 @@ public class PrinterBridge {
             if ("text".equals(t)) {
                 String a = op.optString("a", "l");
                 int align = "c".equals(a) ? 1 : ("r".equals(a) ? 2 : 0);
-                for (String piece : wrap(op.optString("s"), usable)) {
+                for (String piece : wrapDots(op.optString("s"), (cols * 9) / (dw ? 2 : 1))) {
                     line(o, piece, align, dh, dw, b);
                 }
             } else if ("lr".equals(t)) {
                 String l = op.optString("l"), r = op.optString("r");
-                int rw = dispWidth(r);
-                java.util.List<String> parts = wrap(l, Math.max(4, usable - rw - 1));
+                int sc = dw ? 2 : 1;
+                int totalDots = cols * 9;
+                int rDots = dots(r) * sc;
+                java.util.List<String> parts = wrapDots(l, Math.max(60, (totalDots - rDots - 9 * sc) / sc));
                 String first = parts.get(0);
-                int pad = Math.max(1, usable - dispWidth(first) - rw);
-                line(o, first + repeat(' ', pad) + r, 0, dh, dw, b);
+                int space = 9 * sc;
+                int padN = Math.max(1, (totalDots - dots(first) * sc - rDots) / space);
+                line(o, first + repeat(' ', padN) + r, 0, dh, dw, b);
                 for (int k = 1; k < parts.size(); k++) {
                     line(o, parts.get(k), 0, dh, dw, b);
                 }
