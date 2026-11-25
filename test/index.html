@@ -184,6 +184,8 @@ main{flex:1;min-height:0;position:relative}
 /* modal */
 .modal{position:fixed;top:0;right:0;bottom:0;left:0;z-index:50;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center}
 .modal[hidden]{display:none}
+
+.modal.kb{align-items:flex-start}.modal.kb .sheet{max-height:46vh;border-radius:0 0 20px 20px;margin-top:0}
 .sheet{width:100%;max-width:470px;max-height:94%;overflow-y:auto;background:var(--surface);border-radius:20px 20px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px))}
 @media (min-width:600px){.modal{align-items:center}.sheet{border-radius:20px}}
 .sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
@@ -1266,6 +1268,34 @@ function saveMove(){
   s.moves.push({t:new Date().toISOString(),amt:r2(M.kind==='out'?-amt:amt),note:$('#mv-n').value.trim()});
   saveShift(s.id);closeModal();
 }
+function reportRows(s){
+  const c=s.close,by=c.by||{},mv=s.moves||[],p=prCfg(),rows=[];
+  const LR=(l,r,b)=>rows.push({t:'lr',fs:26,h:36,bold:!!b,l:l,r:r});
+  rows.push({t:'c',bold:true,fs:32,h:44,s:String(p.shopEn||'').trim()||S.cfg.shop});
+  rows.push({t:'c',bold:true,fs:30,h:40,s:'TILL REPORT'});
+  rows.push({t:'c',fs:22,h:30,s:'Opened '+s.day+' '+timeStr(s.open.t)});
+  rows.push({t:'c',fs:22,h:30,s:'Closed '+dayKey(new Date(c.t))+' '+timeStr(c.t)});
+  rows.push({t:'line'});
+  LR('Orders',String(c.orders));
+  METHODS.forEach(m=>{if(by[m[0]]!=null)LR(m[1],Number(by[m[0]]).toFixed(2))});
+  LR('Total sales',Number(c.sales).toFixed(2),true);
+  rows.push({t:'line'});
+  LR('Opening float',s.open.total.toFixed(2));
+  LR('Cash sales',Number(by.cash||0).toFixed(2));
+  mv.forEach(m=>LR(m.note||(m.amt<0?'Cash out':'Cash in'),(m.amt<0?'-':'+')+Math.abs(m.amt).toFixed(2)));
+  LR('Should be',c.expected.toFixed(2));
+  LR('Counted',c.total.toFixed(2),true);
+  LR(c.diff===0?'Balanced':(c.diff>0?'Over':'Short'),Math.abs(c.diff).toFixed(2),true);
+  const cc=c.counts||{};
+  const dr=DENOMS.filter(d=>cc[Math.round(d*100)]>0);
+  if(dr.length){rows.push({t:'line'});dr.forEach(d=>{const k=Math.round(d*100);LR((d>=1?'RM '+d:k+' sen')+' x '+cc[k],(k/100*cc[k]).toFixed(2))})}
+  if(c.note){rows.push({t:'line'});rows.push({t:'l',fs:22,h:30,s:'Note: '+c.note})}
+  rows.push({t:'line'});
+  rows.push({t:'c',fs:20,h:28,s:'Printed '+new Date().toLocaleString()});
+  rows.push({t:'gap',h:10});
+  return rows;
+}
+function printReport(s){printTo('cashier',function(){return withPaper('cashier',function(){return rowsBytes(reportRows(s),false)})},'Report printed')}
 function reportHTML(s){
   const c=s.close,by=c.by||{},mv=s.moves||[];
   const R=(a,b,cl)=>'<div class="r '+(cl||'')+'"><span>'+a+'</span><span>'+b+'</span></div>';
@@ -1412,7 +1442,8 @@ function act(a,b){
       const M=S.modal;
       if(NATIVE){
         if(M&&M.type==='receipt')printCashier(M.order);
-        else toast('Printing reports from the app is coming soon.');
+        else if(M&&M.type==='report'&&M.shift&&M.shift.close)printReport(M.shift);
+        else toast('Nothing to print here.');
       }
       else if(M&&M.type==='receipt'&&navigator.usb){usbPrintReceipt(M.order)}
       else{try{window.print()}catch(e){toast('Printing is not available here.')}}
@@ -1559,6 +1590,12 @@ document.addEventListener('change',e=>{
   else if(id==='prLogo')prSet('logoOn',e.target.checked);
   else if(PR_FIELDS[id])prSet(PR_FIELDS[id],e.target.value);
 });
+
+document.addEventListener('focusin',e=>{
+  const m=e.target.closest&&e.target.closest('.modal');
+  if(m&&/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)){m.classList.add('kb');setTimeout(()=>{try{e.target.scrollIntoView({block:'center'})}catch(x){}},120)}
+});
+document.addEventListener('focusout',()=>{setTimeout(()=>{const a=document.activeElement;if(!(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName))){document.querySelectorAll('.modal.kb').forEach(m=>m.classList.remove('kb'))}},250)});
 
 let toastTimer;
 function toast(msg){
