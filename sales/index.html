@@ -31,6 +31,11 @@ button.ghost{background:transparent;color:var(--mute);border:1px solid var(--lin
 .ord b{float:right}
 .pill{display:inline-block;font-size:11px;padding:1px 8px;border-radius:99px;background:var(--bg);color:var(--mute);margin-left:6px}
 .hide{display:none}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:2px}
+.chip{flex:0 0 auto;width:auto;margin:0;padding:8px 14px;border-radius:99px;background:var(--card);color:var(--ink);border:1px solid var(--line);font-weight:500;font-size:14px}
+.chip.on{background:var(--red);color:#fff;border-color:var(--red)}
+input[type=date]{min-height:46px;min-width:0;max-width:100%}
+.row>*{min-width:0}
 </style></head><body><div class="wrap">
 <h1>二佬糖水铺 · Sales</h1>
 <div class="sub" id="asof">Private. Enter your sheet password.</div>
@@ -43,15 +48,16 @@ button.ghost{background:transparent;color:var(--mute);border:1px solid var(--lin
 </div>
 
 <div id="main" class="hide">
-  <div class="row">
-    <div class="card"><div class="k">Today</div><div class="v" id="t1">–</div><div class="small" id="t2"></div></div>
-    <div class="card"><div class="k">This month</div><div class="v" id="m1">–</div><div class="small" id="m2"></div></div>
+  <div class="chips" id="chips"></div>
+  <div class="card hide" id="custom">
+    <div class="row"><div><div class="k">From</div><input id="from" type="date"></div><div><div class="k">To</div><input id="to" type="date"></div></div>
+    <button id="apply">Show these dates</button>
   </div>
-  <div class="card"><div class="k">Last month</div><div class="v" id="l1" style="font-size:20px">–</div><div class="small" id="l2"></div></div>
-  <div class="card"><h2>Last 14 days</h2><div class="bars" id="bars"></div><div class="lbls" id="lbls"></div></div>
-  <div class="card"><h2>This month by payment</h2><div id="meth"></div></div>
-  <div class="card"><h2>Top sellers this month</h2><div id="top"></div></div>
-  <div class="card"><h2>Latest orders</h2><div id="recent"></div></div>
+  <div class="card"><div class="k" id="rlabel"></div><div class="v" id="r1" style="font-size:32px">–</div><div class="small" id="r2"></div></div>
+  <div class="card"><h2 id="bt">By day</h2><div class="bars" id="bars"></div><div class="lbls" id="lbls"></div></div>
+  <div class="card"><h2>By payment</h2><div id="meth"></div></div>
+  <div class="card"><h2>Top sellers</h2><div id="top"></div></div>
+  <div class="card"><h2>Orders</h2><div id="recent"></div><button class="ghost hide" id="more">Show more</button></div>
   <button class="ghost" id="refresh">Refresh</button>
   <button class="ghost" id="out" style="margin-top:8px">Lock</button>
 </div>
@@ -61,40 +67,72 @@ const URL_='https://script.google.com/macros/s/AKfycbwukV7w-4ZRKllcVZKXdnACJz7h3
 const $=id=>document.getElementById(id);
 const rm=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let pw='';try{pw=localStorage.getItem('sales.pw')||''}catch(e){}
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const fromIso=s=>new Date(s+'T00:00:00');
+const addDays=(s,n)=>{const d=fromIso(s);d.setDate(d.getDate()+n);return iso(d)};
+let pw='',today='',cur={key:'today'},last=null,shown=40;
+try{pw=localStorage.getItem('sales.pw')||''}catch(e){}
+function rangeFor(key){
+  const t=today||iso(new Date());
+  if(key==='today')return [t,t,'Today'];
+  if(key==='yesterday'){const y=addDays(t,-1);return [y,y,'Yesterday'];}
+  if(key==='7')return [addDays(t,-6),t,'Last 7 days'];
+  if(key==='month')return [t.slice(0,8)+'01',t,'This month'];
+  if(key==='last'){const d=fromIso(t.slice(0,8)+'01');d.setDate(0);const e=iso(d);return [e.slice(0,8)+'01',e,'Last month'];}
+  return [$('from').value||t,$('to').value||t,'Custom'];
+}
+function chips(){
+  const items=[['today','Today'],['yesterday','Yesterday'],['7','Last 7 days'],['month','This month'],['last','Last month'],['custom','Pick dates']];
+  $('chips').innerHTML=items.map(x=>'<button class="chip'+(cur.key===x[0]?' on':'')+'" data-k="'+x[0]+'">'+x[1]+'</button>').join('');
+  $('chips').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{
+    cur.key=b.dataset.k;
+    if(cur.key==='custom'){$('custom').classList.remove('hide');if(!$('from').value){$('from').value=rangeFor('month')[0];$('to').value=today}chips();return}
+    $('custom').classList.add('hide');chips();load();
+  });
+}
 async function load(){
   $('err').textContent='';
+  const r=rangeFor(cur.key);
   try{
-    const r=await fetch(URL_,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({secret:pw,kind:'report'})});
-    const j=await r.json();
+    const res=await fetch(URL_,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({secret:pw,kind:'report',from:r[0],to:r[1]})});
+    const j=await res.json();
     if(!j.ok)throw new Error(j.error||'Wrong password');
-    show(j);
+    if(!today){today=j.asOf;chips();if(cur.key!=='today'){return load()}}
+    today=j.asOf;last={j:j,label:r[2]};shown=40;show();
   }catch(e){
     $('gate').classList.remove('hide');$('main').classList.add('hide');
     $('err').textContent=/Wrong password/.test(e.message)?'Wrong password.':'Could not load: '+e.message;
-    try{localStorage.removeItem('sales.pw')}catch(x){}
+    if(/Wrong password/.test(e.message)){try{localStorage.removeItem('sales.pw')}catch(x){}}
   }
 }
-function show(j){
+function show(){
+  const j=last.j;
   $('gate').classList.add('hide');$('main').classList.remove('hide');
-  $('asof').textContent='Updated '+new Date().toLocaleTimeString()+' · figures exclude voided orders and Grab/Shopee';
-  $('t1').textContent=rm(j.today.sales);$('t2').textContent=j.today.n+' order'+(j.today.n==1?'':'s');
-  $('m1').textContent=rm(j.month.sales);$('m2').textContent=j.month.n+' orders'+(j.voids?' · '+j.voids+' voided':'');
-  $('l1').textContent=rm(j.lastMonth.sales);$('l2').textContent=j.lastMonth.n+' orders';
-  const days=[];const base=new Date(j.asOf+'T00:00:00');
-  for(let i=13;i>=0;i--){const d=new Date(base);d.setDate(d.getDate()-i);const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');days.push([k,(j.days[k]||{sales:0}).sales])}
-  const mx=Math.max(1,...days.map(x=>x[1]));
-  $('bars').innerHTML=days.map(x=>'<div class="bar" title="'+x[0]+' '+rm(x[1])+'" style="height:'+Math.max(2,Math.round(x[1]/mx*118))+'px"></div>').join('');
-  $('lbls').innerHTML=days.map(x=>'<span>'+x[0].slice(8)+'</span>').join('');
+  $('asof').textContent='Updated '+new Date().toLocaleTimeString()+' · excludes voided orders and Grab/Shopee';
+  $('rlabel').textContent=last.label+' · '+(j.from===j.to?j.from:j.from+' to '+j.to);
+  $('r1').textContent=rm(j.sales);
+  $('r2').textContent=j.n+' order'+(j.n==1?'':'s')+' · avg '+rm(j.n?j.sales/j.n:0)+(j.qty?' · '+j.qty+' items':'')+(j.voids?' · '+j.voids+' voided':'');
+  const span=Math.round((fromIso(j.to)-fromIso(j.from))/864e5)+1;
+  let buckets=[];
+  if(span<=45){for(let i=0;i<span;i++){const k=addDays(j.from,i);buckets.push([k.slice(8),(j.days[k]||{sales:0}).sales,k])}$('bt').textContent='By day'}
+  else{const m={};Object.keys(j.days).forEach(k=>{const mk=k.slice(0,7);m[mk]=(m[mk]||0)+j.days[k].sales});buckets=Object.keys(m).sort().map(k=>[k.slice(5),m[k],k]);$('bt').textContent='By month'}
+  const mx=Math.max(1,...buckets.map(x=>x[1]));
+  $('bars').innerHTML=buckets.map(x=>'<div class="bar" title="'+x[2]+' '+rm(x[1])+'" style="height:'+Math.max(2,Math.round(x[1]/mx*118))+'px"></div>').join('');
+  $('lbls').innerHTML=buckets.map((x,i)=>'<span>'+(buckets.length>20&&i%2?'':x[0])+'</span>').join('');
   const ms=Object.keys(j.methods);
-  $('meth').innerHTML=ms.length?ms.map(m=>'<div class="kv"><span>'+esc(m)+'</span><span>'+rm(j.methods[m])+'</span></div>').join(''):'<div class="small">No sales yet this month.</div>';
-  $('top').innerHTML=j.items.length?j.items.map((x,i)=>'<div class="kv"><span>'+(i+1)+'. '+esc(x[0])+'</span><span>'+x[1]+'</span></div>').join(''):'<div class="small">Nothing yet.</div>';
-  $('recent').innerHTML=j.recent.length?j.recent.map(o=>'<div class="ord"><b>'+rm(o.total)+'</b>'+esc(o.day.slice(5))+' '+esc(o.time)+'<span class="pill">'+esc(o.method)+'</span><div class="small">'+esc(o.items)+'</div></div>').join(''):'<div class="small">No orders yet.</div>';
+  $('meth').innerHTML=ms.length?ms.map(m=>'<div class="kv"><span>'+esc(m)+'</span><span>'+rm(j.methods[m])+'</span></div>').join(''):'<div class="small">No sales in this period.</div>';
+  $('top').innerHTML=j.items.length?j.items.map((x,i)=>'<div class="kv"><span>'+(i+1)+'. '+esc(x[0])+'</span><span>'+x[1]+'</span></div>').join(''):'<div class="small">Nothing in this period.</div>';
+  const list=j.orders.slice(0,shown);
+  $('recent').innerHTML=list.length?list.map(o=>'<div class="ord"><b>'+rm(o.total)+'</b>'+esc(o.day.slice(5))+' '+esc(o.time)+'<span class="pill">'+esc(o.method)+'</span><div class="small">'+esc(o.items)+'</div></div>').join(''):'<div class="small">No orders in this period.</div>';
+  $('more').classList.toggle('hide',j.orders.length<=shown);
 }
-$('go').onclick=()=>{pw=$('pw').value.trim();if(!pw)return;if($('rem').checked){try{localStorage.setItem('sales.pw',pw)}catch(e){}}load()};
+$('more').onclick=()=>{shown+=60;show()};
+$('apply').onclick=()=>{if($('from').value&&$('to').value)load()};
+$('go').onclick=()=>{pw=$('pw').value.trim();if(!pw)return;if($('rem').checked){try{localStorage.setItem('sales.pw',pw)}catch(e){}}chips();load()};
 $('pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('go').click()});
 $('refresh').onclick=load;
 $('out').onclick=()=>{try{localStorage.removeItem('sales.pw')}catch(e){}pw='';$('main').classList.add('hide');$('gate').classList.remove('hide');$('pw').value=''};
+chips();
 if(pw)load();
-setInterval(()=>{if(pw&&!$('main').classList.contains('hide'))load()},60000);
+setInterval(()=>{if(pw&&!$('main').classList.contains('hide')&&cur.key!=='custom')load()},60000);
 </script></body></html>

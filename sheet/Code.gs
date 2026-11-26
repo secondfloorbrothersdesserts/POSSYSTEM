@@ -34,7 +34,7 @@ function doPost(e) {
     var body = JSON.parse(e.postData.contents);
     if (body.secret !== SECRET) return json_({ok: false, error: 'Wrong password'});
     var kind = body.kind;
-    if (kind === 'report') return json_(report_());
+    if (kind === 'report') return json_(report_(body));
     if (!TABS[kind]) return json_({ok: false, error: 'Unknown kind'});
     var sh = sheet_(kind), cols = TABS[kind].length;
     var rows = body.rows || [];
@@ -99,45 +99,40 @@ function ymd_(v) {
   return String(v || '').slice(0, 10);
 }
 
-function buildReport_(values, today) {
-  var mon = today.slice(0, 7);
-  var d = new Date(today + 'T00:00:00');
-  d.setMonth(d.getMonth() - 1);
-  var last = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
-  var out = {today: {sales: 0, n: 0}, month: {sales: 0, n: 0}, lastMonth: {sales: 0, n: 0}, days: {}, methods: {}, items: {}, recent: [], voids: 0, asOf: today};
+// Totals for orders dated from..to (inclusive, yyyy-MM-dd). Voided orders are counted separately.
+function buildRange_(values, from, to) {
+  var out = {from: from, to: to, sales: 0, n: 0, voids: 0, qty: 0, days: {}, methods: {}, items: {}, orders: []};
   for (var i = 1; i < values.length; i++) {
     var r = values[i];
     var day = ymd_(r[1]);
-    if (!day) continue;
+    if (!day || day < from || day > to) continue;
+    if (String(r[14]) === 'VOID') { out.voids++; continue; }
     var total = Number(r[9]) || 0;
-    if (String(r[14]) === 'VOID') { if (day.slice(0, 7) === mon) out.voids++; continue; }
-    if (day.slice(0, 7) === last) { out.lastMonth.sales += total; out.lastMonth.n++; }
-    if (day.slice(0, 7) === mon) {
-      out.month.sales += total; out.month.n++;
-      out.methods[r[10]] = (out.methods[r[10]] || 0) + total;
-      String(r[4]).split(', ').forEach(function (p) {
-        var m = /^(.*) x(\d+)$/.exec(p);
-        if (m) out.items[m[1]] = (out.items[m[1]] || 0) + Number(m[2]);
-      });
-    }
-    if (day === today) { out.today.sales += total; out.today.n++; }
-    var cut = new Date(today + 'T00:00:00'); cut.setDate(cut.getDate() - 59);
-    if (day >= Utilities.formatDate(cut, Session.getScriptTimeZone(), 'yyyy-MM-dd')) {
-      out.days[day] = out.days[day] || {sales: 0, n: 0};
-      out.days[day].sales += total; out.days[day].n++;
-    }
-    out.recent.push({day: day, time: String(r[2]), no: r[3], items: String(r[4]), total: total, method: r[10]});
+    out.sales += total; out.n++;
+    out.days[day] = out.days[day] || {sales: 0, n: 0};
+    out.days[day].sales += total; out.days[day].n++;
+    out.methods[r[10]] = (out.methods[r[10]] || 0) + total;
+    String(r[4]).split(', ').forEach(function (p) {
+      var m = /^(.*) x(\d+)$/.exec(p);
+      if (m) { out.items[m[1]] = (out.items[m[1]] || 0) + Number(m[2]); out.qty += Number(m[2]); }
+    });
+    out.orders.push({day: day, time: String(r[2]), no: r[3], items: String(r[4]), total: total, method: r[10]});
   }
-  out.recent = out.recent.slice(-40).reverse();
-  var top = Object.keys(out.items).map(function (k) { return [k, out.items[k]]; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 10);
-  out.items = top;
-  ['today', 'month', 'lastMonth'].forEach(function (k) { out[k].sales = Math.round(out[k].sales * 100) / 100; });
+  out.orders.sort(function (a, b) { return (b.day + b.time).localeCompare(a.day + a.time); });
+  out.orders = out.orders.slice(0, 300);
+  out.items = Object.keys(out.items).map(function (k) { return [k, out.items[k]]; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 15);
+  out.sales = Math.round(out.sales * 100) / 100;
   return out;
 }
 
-function report_() {
+function report_(body) {
   var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  var r = buildReport_(sheet_('Orders').getDataRange().getValues(), today);
+  var re = /^\d{4}-\d{2}-\d{2}$/;
+  var from = re.test(body.from || '') ? body.from : today;
+  var to = re.test(body.to || '') ? body.to : from;
+  if (to < from) { var t = from; from = to; to = t; }
+  var r = buildRange_(sheet_('Orders').getDataRange().getValues(), from, to);
   r.ok = true;
+  r.asOf = today;
   return r;
 }
