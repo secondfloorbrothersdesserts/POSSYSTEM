@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>二佬 Sales</title>
+<style>
+:root{--bg:#F7EBDD;--card:#fff;--ink:#2b1d17;--mute:#7a665b;--red:#8B2230;--gold:#E0A526;--line:#e8d8c6}
+@media (prefers-color-scheme:dark){:root{--bg:#1d1512;--card:#2a201b;--ink:#f4e8dc;--mute:#b9a496;--line:#43342c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans SC",sans-serif}
+.wrap{max-width:720px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:6px 0 2px}
+.sub{color:var(--mute);font-size:13px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:12px}
+.row{display:flex;gap:12px}.row>*{flex:1}
+.k{font-size:12px;color:var(--mute)}.v{font-size:26px;font-weight:700;color:var(--red)}
+@media (prefers-color-scheme:dark){.v{color:var(--gold)}}
+.small{font-size:13px;color:var(--mute)}
+h2{font-size:15px;margin:0 0 10px}
+.kv{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--line)}
+.kv:last-child{border:0}
+input,button{font:inherit;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);width:100%}
+button{background:var(--red);color:#fff;border:0;font-weight:600;margin-top:10px}
+button.ghost{background:transparent;color:var(--mute);border:1px solid var(--line)}
+.bars{display:flex;align-items:flex-end;gap:4px;height:120px;margin-top:6px}
+.bar{flex:1;background:var(--red);border-radius:4px 4px 0 0;min-height:2px;position:relative}
+@media (prefers-color-scheme:dark){.bar{background:var(--gold)}}
+.lbls{display:flex;gap:4px;margin-top:4px}.lbls span{flex:1;text-align:center;font-size:10px;color:var(--mute)}
+.err{color:#B3261E;margin-top:8px;font-size:14px}
+.ord{padding:8px 0;border-bottom:1px dashed var(--line)}.ord:last-child{border:0}
+.ord b{float:right}
+.pill{display:inline-block;font-size:11px;padding:1px 8px;border-radius:99px;background:var(--bg);color:var(--mute);margin-left:6px}
+.hide{display:none}
+</style></head><body><div class="wrap">
+<h1>二佬糖水铺 · Sales</h1>
+<div class="sub" id="asof">Private. Enter your sheet password.</div>
+
+<div id="gate" class="card">
+  <input id="pw" type="password" placeholder="Sheet password" autocomplete="current-password">
+  <label class="small" style="display:block;margin-top:8px"><input id="rem" type="checkbox" style="width:auto;margin-right:6px" checked>Remember on this phone</label>
+  <button id="go">Show sales</button>
+  <div class="err" id="err"></div>
+</div>
+
+<div id="main" class="hide">
+  <div class="row">
+    <div class="card"><div class="k">Today</div><div class="v" id="t1">–</div><div class="small" id="t2"></div></div>
+    <div class="card"><div class="k">This month</div><div class="v" id="m1">–</div><div class="small" id="m2"></div></div>
+  </div>
+  <div class="card"><div class="k">Last month</div><div class="v" id="l1" style="font-size:20px">–</div><div class="small" id="l2"></div></div>
+  <div class="card"><h2>Last 14 days</h2><div class="bars" id="bars"></div><div class="lbls" id="lbls"></div></div>
+  <div class="card"><h2>This month by payment</h2><div id="meth"></div></div>
+  <div class="card"><h2>Top sellers this month</h2><div id="top"></div></div>
+  <div class="card"><h2>Latest orders</h2><div id="recent"></div></div>
+  <button class="ghost" id="refresh">Refresh</button>
+  <button class="ghost" id="out" style="margin-top:8px">Lock</button>
+</div>
+</div>
+<script>
+const URL_='https://script.google.com/macros/s/AKfycbwukV7w-4ZRKllcVZKXdnACJz7h3-HPp7kXQAXpjLlctkGC6xgPfTl9-GHZMocpw/exec';
+const $=id=>document.getElementById(id);
+const rm=n=>'RM '+Number(n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let pw='';try{pw=localStorage.getItem('sales.pw')||''}catch(e){}
+async function load(){
+  $('err').textContent='';
+  try{
+    const r=await fetch(URL_,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({secret:pw,kind:'report'})});
+    const j=await r.json();
+    if(!j.ok)throw new Error(j.error||'Wrong password');
+    show(j);
+  }catch(e){
+    $('gate').classList.remove('hide');$('main').classList.add('hide');
+    $('err').textContent=/Wrong password/.test(e.message)?'Wrong password.':'Could not load: '+e.message;
+    try{localStorage.removeItem('sales.pw')}catch(x){}
+  }
+}
+function show(j){
+  $('gate').classList.add('hide');$('main').classList.remove('hide');
+  $('asof').textContent='Updated '+new Date().toLocaleTimeString()+' · figures exclude voided orders and Grab/Shopee';
+  $('t1').textContent=rm(j.today.sales);$('t2').textContent=j.today.n+' order'+(j.today.n==1?'':'s');
+  $('m1').textContent=rm(j.month.sales);$('m2').textContent=j.month.n+' orders'+(j.voids?' · '+j.voids+' voided':'');
+  $('l1').textContent=rm(j.lastMonth.sales);$('l2').textContent=j.lastMonth.n+' orders';
+  const days=[];const base=new Date(j.asOf+'T00:00:00');
+  for(let i=13;i>=0;i--){const d=new Date(base);d.setDate(d.getDate()-i);const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');days.push([k,(j.days[k]||{sales:0}).sales])}
+  const mx=Math.max(1,...days.map(x=>x[1]));
+  $('bars').innerHTML=days.map(x=>'<div class="bar" title="'+x[0]+' '+rm(x[1])+'" style="height:'+Math.max(2,Math.round(x[1]/mx*118))+'px"></div>').join('');
+  $('lbls').innerHTML=days.map(x=>'<span>'+x[0].slice(8)+'</span>').join('');
+  const ms=Object.keys(j.methods);
+  $('meth').innerHTML=ms.length?ms.map(m=>'<div class="kv"><span>'+esc(m)+'</span><span>'+rm(j.methods[m])+'</span></div>').join(''):'<div class="small">No sales yet this month.</div>';
+  $('top').innerHTML=j.items.length?j.items.map((x,i)=>'<div class="kv"><span>'+(i+1)+'. '+esc(x[0])+'</span><span>'+x[1]+'</span></div>').join(''):'<div class="small">Nothing yet.</div>';
+  $('recent').innerHTML=j.recent.length?j.recent.map(o=>'<div class="ord"><b>'+rm(o.total)+'</b>'+esc(o.day.slice(5))+' '+esc(o.time)+'<span class="pill">'+esc(o.method)+'</span><div class="small">'+esc(o.items)+'</div></div>').join(''):'<div class="small">No orders yet.</div>';
+}
+$('go').onclick=()=>{pw=$('pw').value.trim();if(!pw)return;if($('rem').checked){try{localStorage.setItem('sales.pw',pw)}catch(e){}}load()};
+$('pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('go').click()});
+$('refresh').onclick=load;
+$('out').onclick=()=>{try{localStorage.removeItem('sales.pw')}catch(e){}pw='';$('main').classList.add('hide');$('gate').classList.remove('hide');$('pw').value=''};
+if(pw)load();
+setInterval(()=>{if(pw&&!$('main').classList.contains('hide'))load()},60000);
+</script></body></html>

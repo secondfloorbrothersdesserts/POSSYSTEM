@@ -34,6 +34,7 @@ function doPost(e) {
     var body = JSON.parse(e.postData.contents);
     if (body.secret !== SECRET) return json_({ok: false, error: 'Wrong password'});
     var kind = body.kind;
+    if (kind === 'report') return json_(report_());
     if (!TABS[kind]) return json_({ok: false, error: 'Unknown kind'});
     var sh = sheet_(kind), cols = TABS[kind].length;
     var rows = body.rows || [];
@@ -90,4 +91,53 @@ function doGet(e) {
   var rw = sheet_('Rewards').getDataRange().getValues();
   for (var k = 1; k < rw.length; k++) out.rewards.push({n: rw[k][1], pts: Number(rw[k][2]) || 0});
   return json_(out);
+}
+
+// ---- Sales report for the online sales page (password protected, read-only) ----
+function ymd_(v) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return String(v || '').slice(0, 10);
+}
+
+function buildReport_(values, today) {
+  var mon = today.slice(0, 7);
+  var d = new Date(today + 'T00:00:00');
+  d.setMonth(d.getMonth() - 1);
+  var last = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+  var out = {today: {sales: 0, n: 0}, month: {sales: 0, n: 0}, lastMonth: {sales: 0, n: 0}, days: {}, methods: {}, items: {}, recent: [], voids: 0, asOf: today};
+  for (var i = 1; i < values.length; i++) {
+    var r = values[i];
+    var day = ymd_(r[1]);
+    if (!day) continue;
+    var total = Number(r[9]) || 0;
+    if (String(r[14]) === 'VOID') { if (day.slice(0, 7) === mon) out.voids++; continue; }
+    if (day.slice(0, 7) === last) { out.lastMonth.sales += total; out.lastMonth.n++; }
+    if (day.slice(0, 7) === mon) {
+      out.month.sales += total; out.month.n++;
+      out.methods[r[10]] = (out.methods[r[10]] || 0) + total;
+      String(r[4]).split(', ').forEach(function (p) {
+        var m = /^(.*) x(\d+)$/.exec(p);
+        if (m) out.items[m[1]] = (out.items[m[1]] || 0) + Number(m[2]);
+      });
+    }
+    if (day === today) { out.today.sales += total; out.today.n++; }
+    var cut = new Date(today + 'T00:00:00'); cut.setDate(cut.getDate() - 59);
+    if (day >= Utilities.formatDate(cut, Session.getScriptTimeZone(), 'yyyy-MM-dd')) {
+      out.days[day] = out.days[day] || {sales: 0, n: 0};
+      out.days[day].sales += total; out.days[day].n++;
+    }
+    out.recent.push({day: day, time: String(r[2]), no: r[3], items: String(r[4]), total: total, method: r[10]});
+  }
+  out.recent = out.recent.slice(-40).reverse();
+  var top = Object.keys(out.items).map(function (k) { return [k, out.items[k]]; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 10);
+  out.items = top;
+  ['today', 'month', 'lastMonth'].forEach(function (k) { out[k].sales = Math.round(out[k].sales * 100) / 100; });
+  return out;
+}
+
+function report_() {
+  var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  var r = buildReport_(sheet_('Orders').getDataRange().getValues(), today);
+  r.ok = true;
+  return r;
 }
