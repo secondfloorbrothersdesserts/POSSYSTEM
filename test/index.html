@@ -453,7 +453,7 @@ function totals(){
   const lines=S.cart.map(l=>{
     const it=item(l.id);if(!it)return null;
     const addP=(l.add||[]).reduce((a,x)=>a+x.p,0)+(l.ta==='take'?(S.cfg.takeFee||0):0);
-    const nm=it.n+((l.add&&l.add.length)?' + '+l.add.map(x=>x.n).join(', '):'')+(l.ta==='take'?' (Takeaway +'+Number(S.cfg.takeFee||0).toFixed(2)+')':'');
+    const nm=it.n+((l.add&&l.add.length)?' + '+l.add.map(x=>x.n).join(', '):'')+(l.ta==='take'&&Number(S.cfg.takeFee||0)>0?' (Takeaway +'+Number(S.cfg.takeFee||0).toFixed(2)+')':'');
     return {lid:l.lid,id:it.id,n:nm,e:it.e||'',p:r2(it.p+addP),q:l.q,ta:l.ta==='take',bn:it.n,add:(l.add||[]).map(x=>x.n)};
   }).filter(Boolean);
   const sub=r2(lines.reduce((a,l)=>a+l.p*l.q,0));
@@ -746,7 +746,7 @@ function addonModal(){
   return '<div class="sheet" role="dialog" aria-modal="true" aria-label="Item options"><div class="sheet-head"><h2>'+esc(it.n)+'</h2><button class="x" data-act="close-modal" aria-label="Close">✕</button></div>'+
     (rows?'<p class="hint" style="margin:0 0 10px">Choose add-ons for this item.</p>'+rows:'')+
     '<h3 style="margin-top:'+(rows?'14px':'0')+'">Dine in or takeaway?</h3>'+
-    '<div class="seg"><button class="'+(M.ta==='dine'?'on':'')+'" data-act="ta" data-v="dine">Dine in</button><button class="'+(M.ta==='take'?'on':'')+'" data-act="ta" data-v="take">Takeaway +'+Number(S.cfg.takeFee||0).toFixed(2)+'</button></div>'+
+    '<div class="seg"><button class="'+(M.ta==='dine'?'on':'')+'" data-act="ta" data-v="dine">Dine in</button><button class="'+(M.ta==='take'?'on':'')+'" data-act="ta" data-v="take">Takeaway'+(Number(S.cfg.takeFee||0)>0?' +'+Number(S.cfg.takeFee||0).toFixed(2):'')+'</button></div>'+
     '<button class="charge" style="width:100%;margin:14px 0 0" data-act="addon-confirm">Add to order</button></div>';
 }
 function rewardModal(){
