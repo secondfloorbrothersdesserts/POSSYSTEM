@@ -35,6 +35,7 @@ function doPost(e) {
     if (body.secret !== SECRET) return json_({ok: false, error: 'Wrong password'});
     var kind = body.kind;
     if (kind === 'report') return json_(report_(body));
+    if (kind === 'members') return json_(members_());
     if (!TABS[kind]) return json_({ok: false, error: 'Unknown kind'});
     var sh = sheet_(kind), cols = TABS[kind].length;
     var rows = body.rows || [];
@@ -135,4 +136,15 @@ function report_(body) {
   r.ok = true;
   r.asOf = today;
   return r;
+}
+
+// ---- Member list for "Load members from the sheet" in the POS (password protected) ----
+function members_() {
+  var v = sheet_('Members').getDataRange().getValues(), list = [];
+  for (var i = 1; i < v.length; i++) {
+    var ph = String(v[i][0] || '').replace(/\D/g, '');
+    if (!ph) continue;
+    list.push({phone: ph, name: String(v[i][1] || ''), points: Number(v[i][2]) || 0, visits: Number(v[i][3]) || 0, spent: Number(v[i][4]) || 0, since: ymd_(v[i][5])});
+  }
+  return {ok: true, members: list};
 }

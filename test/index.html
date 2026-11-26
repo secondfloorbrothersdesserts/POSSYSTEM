@@ -1532,6 +1532,20 @@ function act(a,b){
     case 'pr-test-kit':printTo('kitchen',function(){return textKitchen()?testOps('Kitchen printer'):withPaper('kitchen',function(){return rowsBytes(testRows('Kitchen printer'),false)})},'Test printed');break;
     case 'sh-sync':{const c=shCfg();if(!c.url||!c.secret){toast('Enter the web link and password first.');break}toast('Saving…');sheetSync().then(s=>{toast(s&&s.err?'Problem: '+s.err:'Saved to your Google Sheet');softRender()});break}
     case 'sh-resend':{const c=shCfg();if(!c.url||!c.secret){toast('Enter the web link and password first.');break}toast('Sending everything…');sheetSync(true).then(s=>{toast(s&&s.err?'Problem: '+s.err:'Everything sent');softRender()});break}
+    case 'sh-members':{
+      const c=shCfg();if(!c.url||!c.secret){toast('Enter the web link and password first.');break}
+      toast('Loading members…');
+      shHttp('POST',c.url,JSON.stringify({secret:c.secret,kind:'members'})).then(res=>{
+        if(res.err||!res.j||!res.j.ok){toast('Problem: '+(res.err||(res.j&&res.j.error)||'failed'));return}
+        let add=0,skip=0;
+        res.j.members.forEach(m=>{
+          const p=normPhone(m.phone);if(!p)return;
+          if(S.members[p]){skip++;return}
+          S.members[p]={phone:p,name:m.name||'',points:Math.max(0,parseInt(m.points,10)||0),visits:parseInt(m.visits,10)||0,spent:Number(m.spent)||0,since:m.since||dayKey()};
+          saveMember(p);add++;
+        });
+        toast(add+' members added'+(skip?', '+skip+' already here (kept as they are)':''));render();
+      });break}
     case 'pr-drawer':openDrawerNow(false);break;
     case 'pr-find':{
       if(!(NATIVE&&typeof window.AndroidPrinter.scanAsync==='function')){toast('Update the app to find printers.');break}
@@ -1786,7 +1800,7 @@ function sheetCard(){
     '<p class="hint">Copies every order, till report and member to your own Google Sheet, and lets customers check their points online. '+line+'</p>'+
     '<label class="fld">Sheet web link<input id="shUrl" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" value="'+esc(c.url)+'"></label>'+
     '<label class="fld">Sheet password<input id="shSecret" value="'+esc(c.secret)+'" autocomplete="off"></label>'+
-    '<div class="btnrow"><button class="btn primary" data-act="sh-sync">Save now</button><button class="btn" data-act="sh-resend">Send everything again</button></div></section>';
+    '<div class="btnrow"><button class="btn primary" data-act="sh-sync">Save now</button><button class="btn" data-act="sh-resend">Send everything again</button></div><div class="btnrow" style="margin-top:8px"><button class="btn" data-act="sh-members">Load members from the sheet</button></div></section>';
 }
 
 /* ---------- customer-only points view ---------- */
